@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── Canonical paths ────────────────────────────────────────────────
+ROUTER_ROOT="${OPENCLAW_ROUTER_ROOT:-$HOME/.openclaw/router}"
+ROUTER_ENV="$ROUTER_ROOT/env/router.env"
+ROUTER_CONFIG="$ROUTER_ROOT/config/router.config.json"
+ROUTER_ENTRYPOINT="$ROUTER_ROOT/runner/openclaw-router/bin/ai-code-runner"
+
+# ── Load environment ───────────────────────────────────────────────
+if [ -f "$ROUTER_ENV" ]; then
+  set -a
+  source "$ROUTER_ENV"
+  set +a
+fi
+
+# ── Validate ───────────────────────────────────────────────────────
+if [ ! -f "$ROUTER_ENTRYPOINT" ]; then
+  echo '{"ok":false,"protocol_version":1,"error_code":"ROUTER_NOT_FOUND","message":"Router entrypoint not found at '"$ROUTER_ENTRYPOINT"'","fallback_recommended":true}' 
+  exit 1
+fi
+
+if [ ! -f "$ROUTER_CONFIG" ]; then
+  echo '{"ok":false,"protocol_version":1,"error_code":"CONFIG_NOT_FOUND","message":"Router config not found at '"$ROUTER_CONFIG"'","fallback_recommended":true}' 
+  exit 1
+fi
+
+# ── Invoke ─────────────────────────────────────────────────────────
+exec python3 "$ROUTER_ENTRYPOINT" --config "$ROUTER_CONFIG" "$@"

@@ -28,8 +28,8 @@
       },
       "routerCommand": {
         "type": "string",
-        "default": "python3 ~/.openclaw/router/bin/ai-code-runner",
-        "description": "Shell command to invoke openclaw-router CLI."
+        "default": "~/.openclaw/router/bin/ai-code-runner",
+        "description": "Wrapper script for openclaw-router (loads env, sets config path)"
       },
       "routerConfigPath": {
         "type": "string",
