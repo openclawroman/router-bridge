@@ -1,4 +1,5 @@
-import { ExecutionBackend, ScopeType, PluginConfig, DEFAULT_CONFIG } from "./types";
+import { ExecutionBackend, ScopeType, RolloutLevel, ShadowMode, PluginConfig, DEFAULT_CONFIG } from "./types";
+import { shouldRoute, describeRolloutLevel } from "./rollout";
 import { ExecutionBackendStore } from "./store";
 import { createAdapter } from "./adapters/factory";
 import type { HealthResult } from "./adapters/base";

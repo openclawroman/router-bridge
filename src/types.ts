@@ -1,5 +1,18 @@
 import * as path from "path";
 
+export enum RolloutLevel {
+  Native = "native",
+  HealthCheck = "health-check",
+  Thread = "thread",
+  Session = "session",
+  Global = "global",
+}
+
+export enum ShadowMode {
+  Off = "off",
+  Observe = "observe",
+}
+
 export enum ExecutionBackend {
   Native = "native",
   RouterBridge = "router-bridge",
@@ -31,6 +44,8 @@ export interface PluginConfig {
   targetHarnessId: string;
   threadBindingMode: "per-thread" | "per-session" | "free";
   acpSessionKey: string | null;
+  rolloutLevel: RolloutLevel;
+  shadowMode: ShadowMode;
 }
 
 function defaultRouterRoot(): string {
@@ -56,4 +71,6 @@ export const DEFAULT_CONFIG: PluginConfig = {
   targetHarnessId: "default",
   threadBindingMode: "per-thread" as const,
   acpSessionKey: null,
+  rolloutLevel: RolloutLevel.Native,
+  shadowMode: ShadowMode.Off,
 };
