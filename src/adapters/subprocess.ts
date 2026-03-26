@@ -325,7 +325,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     const attachments: Attachment[] = envelope.attachments ?? [];
     const context: TaskContext = envelope.context ?? {};
 
-    return {
+    const payload: RouterPayload = {
       protocol_version: 1,
       task: envelope.task,
       task_id: envelope.taskId,
@@ -360,6 +360,13 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       },
       timeout_ms: timeoutMs,
     };
+
+    // Continuity fields — add to payload if present
+    if (envelope.cwd) (payload as any).cwd = envelope.cwd;
+    if (envelope.recentContext) (payload as any).recent_context = envelope.recentContext;
+    if (envelope.repoBranch) (payload as any).repo_branch = envelope.repoBranch;
+
+    return payload;
   }
 
   /**
