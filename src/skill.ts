@@ -66,8 +66,6 @@ export function handleRouterIntent(input: string, ctx: any, config: PluginConfig
     case "off":
       return handleRouterOff(ctx, config);
     case "status":
-      // handleRouterStatus is async, but skill handler can't be async in all contexts
-      // Return a sync wrapper that the plugin layer can await
       return handleRouterStatus(ctx, config);
   }
 }

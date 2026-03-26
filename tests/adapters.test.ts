@@ -2,6 +2,59 @@ import { describe, it, expect } from "vitest";
 import { SubprocessRouterAdapter, AcpRouterAdapter } from "../src/adapters";
 import type { TaskEnvelope } from "../src/adapters";
 
+describe("Health diagnostics", () => {
+  it("binary check detects missing binary", async () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "/nonexistent/binary",
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+    const result = await adapter.health();
+    expect(result.healthy).toBe(false);
+    expect(result.output).toContain("failed");
+  });
+
+  it("config check detects missing config", async () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "echo",
+      routerConfigPath: "/nonexistent/config.yaml",
+      healthCacheTtlMs: 0,
+    });
+    const result = await adapter.health();
+    expect(result.healthy).toBe(false);
+    expect(result.output).toContain("failed");
+  });
+
+  it("health returns diagnostic output", async () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "/nonexistent/binary",
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+    const result = await adapter.health();
+    expect(result.output).toBeTruthy();
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("getLastHealthError returns null initially", () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "echo",
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+    expect(adapter.getLastHealthError()).toBeNull();
+  });
+
+  it("getLastHealthError tracks last error", () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "echo",
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+    expect(adapter.getLastHealthError()).toBeNull();
+  });
+});
+
 describe("RouterExecutionAdapter interface", () => {
   describe("SubprocessRouterAdapter", () => {
     it("supportsPersistentSession returns false", () => {
