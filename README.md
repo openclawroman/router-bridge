@@ -17,16 +17,16 @@ router-bridge is an **execution backend switch plugin**. It controls *which back
 ```
 User: "write me a function to parse JSON"
   ↓
-  OpenClaw session
+  OpenClaw session → before_prompt_build hook fires
   ↓
   router-bridge plugin:
     1. classifyTask("write me a function...") → coding task
-    2. shouldDelegateToExecutionBackend() → yes, backend is router-bridge
+    2. shouldDelegateToExecutionBackend() → checks scope (thread→session→global), delegates
     3. SubprocessRouterAdapter.execute() → spawn openclaw-router CLI
-    4. CLI dispatches to Codex/Claude/MiniMax
-    5. Response flows back to user
+    4. CLI routes to Codex/Claude/MiniMax
+    5. Result injected as ctx.routerResult
   ↓
-User sees the result
+User sees the result (or falls back to native on error)
 ```
 
 When the backend is set to `native`, the model handles tasks directly — no delegation.
@@ -82,8 +82,8 @@ index.ts                  ← Plugin entry: registers command + skill + service
 {
   "backendMode": "native",
   "scopeMode": "thread",
-  "routerCommand": "python3 /tmp/openclaw-router/cli.py",
-  "routerConfigPath": "/tmp/openclaw-router/config/router.yaml",
+  "routerCommand": "python3 /tmp/openclaw-router/bin/ai-code-runner",
+  "routerConfigPath": "/tmp/openclaw-router/config/router.config.json",
   "fallbackToNativeOnError": true,
   "healthCacheTtlMs": 30000,
   "targetHarnessId": "default",
@@ -98,8 +98,8 @@ index.ts                  ← Plugin entry: registers command + skill + service
 |-------|---------|-------------|
 | `backendMode` | `native` | `native`, `router-bridge`, or `router-acp` |
 | `scopeMode` | `thread` | Where overrides apply: `thread`, `session`, or `global` |
-| `routerCommand` | `python3 .../cli.py` | Shell command to invoke openclaw-router |
-| `routerConfigPath` | `.../router.yaml` | Path to openclaw-router YAML config |
+| `routerCommand` | `python3 .../ai-code-runner` | Shell command to invoke openclaw-router |
+| `routerConfigPath` | `.../router.config.json` | Path to openclaw-router JSON config |
 | `fallbackToNativeOnError` | `true` | Auto-fallback to native if router errors |
 | `healthCacheTtlMs` | `30000` | Health check cache duration |
 | `targetHarnessId` | `default` | Harness ID for ACP adapter (Phase 2) |
@@ -134,13 +134,21 @@ The communication is via **stdin JSON payload**:
   "task_id": "task-42",
   "task_meta": {
     "type": "coding",
-    "priority": "high"
+    "task_id": "task-42",
+    "task_class": "code_generation",
+    "risk": "medium",
+    "modality": "text",
+    "requires_repo_write": true
   },
   "prompt": "Write a TypeScript function...",
   "scope": {
     "scope_id": "thread-abc",
     "thread_id": "t-123",
     "session_id": "s-456"
+  },
+  "context": {
+    "working_directory": "/tmp/openclaw-router",
+    "git_branch": "main"
   },
   "timeout_ms": 60000
 }

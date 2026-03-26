@@ -59,6 +59,9 @@ export default function register(api: any) {
         config,
         scopeId,
         scopeType,
+        undefined,  // healthResult — will be checked inside the function
+        threadId,
+        sessionId,
       );
 
       if (decision.delegate) {

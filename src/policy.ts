@@ -97,11 +97,13 @@ export async function shouldDelegateToExecutionBackend(
   scopeId: string = "default",
   scopeType: ScopeType = ScopeType.Global,
   healthResult?: HealthResult,
+  threadId?: string | null,
+  sessionId?: string | null,
 ): Promise<DelegationDecision> {
   const store = new ExecutionBackendStore();
 
   // 1. Check backend in scope
-  const state = store.get(scopeType, scopeId);
+  const state = store.getEffective(scopeType, scopeId, threadId ?? undefined, sessionId ?? undefined);
   const backend = state?.executionBackend ?? ExecutionBackend.Native;
 
   if (backend !== ExecutionBackend.RouterBridge) {
