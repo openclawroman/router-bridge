@@ -34,8 +34,24 @@ interface RouterPayload {
 
 /** Expected JSON structure from router CLI stdout */
 interface RouterResponse {
+  // From openclaw-router ExecutorResult
+  protocol_version?: number;
+  task_id?: string;
+  tool?: string;
+  backend?: string;
+  model_profile?: string;
   success: boolean;
-  output: string;
+  normalized_error?: string | null;
+  exit_code?: number;
+  latency_ms?: number;
+  request_id?: string | null;
+  cost_estimate_usd?: number | null;
+  artifacts?: string[];
+  stdout_ref?: string | null;
+  stderr_ref?: string | null;
+  final_summary?: string;
+  // Legacy fields (fallback compatibility)
+  output?: string;
   error?: string;
   tokens_used?: number;
   cost_usd?: number;
@@ -403,14 +419,35 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         }
 
         if (typeof parsed.success === "boolean") {
+          // Extract output — prefer final_summary (router format), fallback to output/error
+          const outputText =
+            parsed.final_summary
+            ?? parsed.output
+            ?? parsed.error
+            ?? "";
+
+          // Extract model — prefer model_profile, fallback to model
+          const model = parsed.model_profile ?? parsed.model;
+
+          // Extract cost — prefer cost_estimate_usd (router), fallback to cost_usd (legacy)
+          const cost = parsed.cost_estimate_usd ?? parsed.cost_usd;
+
+          // Extract duration — prefer latency_ms (router), fallback to duration_ms (legacy)
+          const duration = parsed.latency_ms ?? parsed.duration_ms ?? durationMs;
+
+          // Extract error details
+          const errorDetails = parsed.success ? null : (parsed.normalized_error ?? parsed.error ?? "");
+
           return {
             success: parsed.success,
-            output: redactSecrets(parsed.output ?? parsed.error ?? ""),
-            exitCode: parsed.success ? 0 : exitCode ?? 1,
-            durationMs: parsed.duration_ms ?? durationMs,
-            costEstimateUsd: parsed.cost_usd,
-            tokensUsed: parsed.tokens_used,
-            model: parsed.model,
+            output: parsed.success
+              ? redactSecrets(outputText)
+              : redactSecrets(errorDetails || outputText),
+            exitCode: parsed.success ? 0 : (parsed.exit_code ?? exitCode ?? 1),
+            durationMs: duration,
+            costEstimateUsd: cost ?? 0,
+            tokensUsed: parsed.tokens_used ?? 0,
+            model,
           };
         }
       } catch {
