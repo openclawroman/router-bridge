@@ -33,14 +33,16 @@ When the backend is set to `native`, the model handles tasks directly — no del
 
 ## Commands
 
-### `/router on`
-Enable router-bridge delegation for this thread/session.
-
-### `/router off`
-Switch back to native execution.
-
-### `/router status`
-Show current backend, scope, health diagnostics, and config.
+| Command | Description |
+|---------|-------------|
+| `/router on` | Enable router-bridge delegation for this thread/session |
+| `/router off` | Switch back to native execution |
+| `/router status` | Show current backend, scope, health diagnostics, config, and metrics |
+| `/router rollout [level]` | View or set rollout level (native, health-check, thread, session, global) |
+| `/router shadow [mode]` | View or set shadow mode (off, observe) |
+| `/router snapshot` | Take a config snapshot for rollback |
+| `/router init-config` | Generate default openclaw-router config |
+| `/router migrate-config` | Migrate existing config with backup |
 
 ## Natural Language
 
@@ -48,9 +50,9 @@ You can also use natural language (via the skill handler):
 
 - "switch to external routing layer in this thread" → `/router on`
 - "turn off router in this chat" → `/router off`
-- "is router on?" → `/router status`
+- "what's my router" → `/router status`
 
-These map to the same handlers as `/router on|off|status` — single source of truth.
+These map to the same handlers as the corresponding commands — single source of truth.
 
 ## Architecture
 
@@ -72,7 +74,7 @@ index.ts                  ← Plugin entry: registers command + skill + service
 │   └── SKILL.md          ← Trigger patterns for natural language
 ├── docs/
 │   └── MIGRATION.md      ← Phase 1 → Phase 2 migration guide
-├── tests/                ← 127 tests across 8 files
+├── tests/                ← 298 tests across 32 files
 └── openclaw.plugin.json  ← Manifest with configSchema
 ```
 
@@ -123,15 +125,19 @@ For persistent sessions with streaming and cancellation, see Phase 2 (ACP) in [d
 | `targetHarnessId` | `default` | Harness ID for ACP adapter (Phase 2) |
 | `threadBindingMode` | `per-thread` | ACP session binding mode (Phase 2) |
 | `acpSessionKey` | `null` | Pre-configured ACP session key (Phase 2) |
+| `rolloutLevel` | `native` | Rollout level: `native`, `health-check`, `thread`, `session`, `global` |
+| `shadowMode` | `off` | Shadow mode: `off`, `observe` |
 
 ## Health Diagnostics
 
-`/router status` runs 4 health checks:
+The adapter health check (used before delegation) runs 4 checks:
 
-1. **binary_exists** — Is the router CLI binary found? (PATH resolution for relative names, `fs.existsSync` for absolute paths)
+1. **binary_exists** — Is the router CLI binary found?
 2. **config_valid** — Does the config file exist?
 3. **env_sufficient** — Is PATH set? Is the temp directory writable?
 4. **subprocess_health** — Does `routerCommand --health` return success?
+
+`/router status` additionally runs 7 doctor checks: python availability, router binary, config file, runtime directory writable, secrets present, health probe, and security audit.
 
 If any check fails, the plugin falls back to native execution (when `fallbackToNativeOnError: true`).
 

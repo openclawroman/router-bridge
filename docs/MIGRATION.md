@@ -1,8 +1,6 @@
 # Phase 1 → Phase 2 Migration Guide
 
-## What This Plugin Is
-
-An **execution backend switch plugin**. It manages which backend executes coding tasks:
+router-bridge manages which backend executes coding tasks:
 - **Phase 1**: `backendMode=router-bridge` — subprocess to openclaw-router CLI
 - **Phase 2**: `backendMode=router-acp` — ACP session to coding harness
 
@@ -25,7 +23,7 @@ An **execution backend switch plugin**. It manages which backend executes coding
 ## What Stays the Same
 
 - **Plugin shell**: `openclaw.plugin.json`, `index.ts`, `register()` function
-- **Slash commands**: `/router on|off|status` — same auto-reply behavior
+- **Slash commands**: `/router on|off|status|rollout|shadow|snapshot` — same auto-reply behavior
 - **Skill handler**: Same `matchRouterIntent()` + `handleRouterIntent()` delegation
 - **State storage**: `ExecutionBackendStore` — get/set/clear/status, atomic writes
 - **State model**: `ExecutionBackend` enum (native/router-bridge/router-acp), `ScopeType` enum

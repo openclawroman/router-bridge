@@ -16,9 +16,9 @@ curl -sL https://raw.githubusercontent.com/openclawroman/router-bridge/main/scri
 Check `~/.openclaw/router/env/router.env` exists and has API keys set.
 
 ### "Timed out"
-Router execution exceeded timeout (default 120s). Check if openclaw-router is responsive:
+Router execution exceeded timeout (default 60s). Check if openclaw-router is responsive:
 ```bash
-echo '{"test":true}' | python3 ~/.openclaw/router/bin/openclaw-router
+~/.openclaw/router/bin/ai-code-runner --health
 ```
 
 ### "Malformed response"
@@ -43,7 +43,8 @@ API key missing or invalid in `router.env`. Check and restart.
 
 ```
 /router status          — full status with metrics, version, config
-/router doctor          — preflight checks
+/router rollout         — show current rollout level
+/router shadow          — show current shadow mode
 ```
 
 ## Recovery

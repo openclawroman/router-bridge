@@ -25,7 +25,7 @@ The script is idempotent — safe to run multiple times. It creates the director
 │   └── router.config.json      # openclaw-router config
 ├── runtime/
 │   ├── bridge/
-│   │   └── .router-state.json  # router-bridge scoped state
+│   │   └── state.json  # router-bridge scoped state
 │   └── router/
 │       ├── provider_state.json # router execution state
 │       └── routing.log.jsonl   # router structured logs
