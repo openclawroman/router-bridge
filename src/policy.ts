@@ -13,6 +13,7 @@ export interface DelegationDecision {
 export interface TaskClassification {
   isCodingTask: boolean;
   taskType: "coding" | "review" | "planning" | "chat" | "other";
+  taskClass: string; // Maps to openclaw-router TaskClass enum
   confidence: number; // 0-1
   signals: string[]; // what triggered the classification
 }
@@ -20,17 +21,26 @@ export interface TaskClassification {
 export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   // If TaskEnvelope with taskMeta, use that directly
   if (typeof task !== "string" && task.taskMeta?.type) {
+    const type = task.taskMeta.type;
+    const taskClass = type === "coding"
+      ? "implementation"
+      : type === "review"
+        ? "code_review"
+        : type === "planning"
+          ? "planner"
+          : "implementation";
     return {
-      isCodingTask: task.taskMeta.type === "coding" || task.taskMeta.type === "review",
-      taskType: task.taskMeta.type,
+      isCodingTask: type === "coding" || type === "review",
+      taskType: type,
+      taskClass,
       confidence: 0.95,
-      signals: ["taskMeta.type:" + task.taskMeta.type],
+      signals: ["taskMeta.type:" + type],
     };
   }
 
   const text = typeof task === "string" ? task : task.task;
   if (!text || !text.trim()) {
-    return { isCodingTask: false, taskType: "chat", confidence: 0, signals: ["empty-input"] };
+    return { isCodingTask: false, taskType: "chat", taskClass: "implementation", confidence: 0, signals: ["empty-input"] };
   }
   const lower = text.toLowerCase();
   const signals: string[] = [];
@@ -83,9 +93,25 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   const codingConfidence = total > 0 ? codingScore / total : 0.3;
   const isCoding = codingConfidence >= 0.5 && codingScore >= 1;
 
+  // Resolve taskClass for router
+  const taskClass = isCoding
+    ? lower.match(/\b(refactor|optimi[zs]e)\b/i)
+      ? "refactor"
+      : lower.match(/\b(debug|trace|diagnose)\b/i)
+        ? "debug"
+        : lower.match(/\b(test|testing|unittest|coverage|spec|assert)/i)
+          ? "test_generation"
+          : lower.match(/\b(review)\b/i)
+            ? "code_review"
+            : "implementation"
+    : lower.match(/\b(plan|planning|strategy|architecture|design)\b/i)
+      ? "planner"
+      : "implementation";
+
   return {
     isCodingTask: isCoding,
     taskType: isCoding ? "coding" : (chatScore > 0 ? "chat" : "other"),
+    taskClass,
     confidence: codingConfidence,
     signals,
   };

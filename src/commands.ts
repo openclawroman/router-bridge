@@ -288,10 +288,10 @@ export function handleRouterInitConfig(ctx: any, config: PluginConfig = DEFAULT_
     routing: {
       default_executor: "openrouter",
       rules: [
-        { task_class: "code_generation", executor: "codex_cli" },
+        { task_class: "implementation", executor: "codex_cli" },
         { task_class: "code_review", executor: "claude_code" },
-        { task_class: "planning", executor: "openrouter" },
-        { task_class: "general", executor: "openrouter" },
+        { task_class: "planner", executor: "openrouter" },
+        { task_class: "implementation", executor: "openrouter" },
       ],
     },
     timeout: { default_ms: 120000, max_ms: 300000 },
