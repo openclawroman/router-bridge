@@ -1,23 +1,16 @@
 import { handleRouterCommand } from "./src/commands";
+import { matchRouterIntent, handleRouterIntent } from "./src/skill";
 import { shouldDelegateToExecutionBackend, classifyTask } from "./src/policy";
 import type { PluginConfig } from "./src/types";
 import { DEFAULT_CONFIG } from "./src/types";
 
-/**
- * Router Bridge Plugin — registers the /router command and delegation service.
- *
- * This is an **auto-reply command**: it executes directly in the Gateway
- * with no model/AI involvement. The handler returns { text: string } which
- * is delivered to the user as-is, bypassing any LLM processing.
- */
 export default function register(api: any) {
-  // ── Merge plugin config with defaults ─────────────────────────────
   const getConfig = (): PluginConfig => ({
     ...DEFAULT_CONFIG,
     ...(api.config?.plugins?.entries?.["router-bridge"]?.config ?? {}),
   });
 
-  // ── Auto-reply command: /router on|off|status ────────────────────
+  // Auto-reply command
   api.registerCommand({
     name: "router",
     description: "Control router execution backend (/router on|off|status)",
@@ -28,8 +21,22 @@ export default function register(api: any) {
     },
   });
 
-  // ── Delegation service ────────────────────────────────────────────
-  // Other plugins or core can query this to check if a task should be delegated.
+  // Skill handler — registered if api.registerSkill exists
+  if (api.registerSkill) {
+    api.registerSkill({
+      id: "router-bridge",
+      match: (input: string) => {
+        const m = matchRouterIntent(input);
+        return m.matched ? { action: m.action, confidence: m.confidence } : null;
+      },
+      handler: async (ctx: any) => {
+        const config = getConfig();
+        return handleRouterIntent(ctx.input || ctx.args || "", ctx, config);
+      },
+    });
+  }
+
+  // Delegation service
   api.registerService({
     id: "router-bridge",
     start: () => {

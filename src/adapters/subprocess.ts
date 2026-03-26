@@ -1,5 +1,6 @@
 import { execSync, spawn } from "child_process";
-import type { RouterExecutionAdapter, HealthResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
+import * as fs from "fs";
+import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
 
 /** Payload sent to the router CLI via stdin */
 interface RouterPayload {
@@ -37,6 +38,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   private routerConfigPath: string;
   private healthCache: Map<string, { result: HealthResult; timestamp: number }> = new Map();
   private healthCacheTtlMs: number;
+  private lastError: string | null = null;
 
   constructor(opts: { routerCommand: string; routerConfigPath: string; healthCacheTtlMs: number }) {
     this.routerCommand = opts.routerCommand;
