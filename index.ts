@@ -46,7 +46,6 @@ export default function register(api: any) {
   if (api.on) {
     api.on("before_prompt_build", async (ctx: any) => {
       const config = getConfig();
-      if (config.backendMode !== "router-bridge") return;
 
       const taskText = ctx.userMessage || ctx.prompt || "";
       const classification = classifyTask(taskText);
@@ -57,23 +56,25 @@ export default function register(api: any) {
       const sessionId = ctx.sessionKey || null;
       const scopeId = threadId || sessionId || "default";
 
+      // Resolve effective backend from scoped store first, fall back to global
+      const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
+      const effectiveBackend = effective?.executionBackend || config.backendMode;
+
+      if (effectiveBackend !== "router-bridge") return;
+
       const decision = await shouldDelegateToExecutionBackend(
         taskText,
         config,
         scopeId,
         scopeType,
-        undefined,  // healthResult — will be checked inside the function
+        undefined,
         threadId,
         sessionId,
       );
 
       if (decision.delegate) {
-        // Use effective scoped backend for adapter creation
-        const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
-        const effectiveBackend = effective?.executionBackend || config.backendMode;
         const adapter = createAdapter(config, effectiveBackend);
 
-        // Auto-degrade check
         if (config.fallbackToNativeOnError) {
           const safety = checkAutoDegrade(config);
           if (safety.shouldDegrade) {
@@ -84,7 +85,6 @@ export default function register(api: any) {
           }
         }
 
-        // Pre-flight health check
         try {
           const health = await adapter.health();
           if (!health.healthy) {
@@ -114,14 +114,17 @@ export default function register(api: any) {
             threadId,
             sessionId,
             taskMeta: { type: classification.taskType },
+            taskClass: classification.taskClass,
             prompt: taskText,
+            cwd: ctx.cwd || process.cwd(),
+            recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
+            repoBranch: ctx.gitBranch || null,
           });
 
           if (result.success) {
-            // Inject result into context so the model sees it
             ctx.routerResult = result.output;
             ctx.routerMetadata = {
-              backend: "router-bridge",
+              backend: effectiveBackend,
               classification,
               durationMs: result.durationMs,
               costEstimateUsd: result.costEstimateUsd,
@@ -129,8 +132,8 @@ export default function register(api: any) {
               model: result.model,
             };
             recordSuccess();
+            markRecovered();
           } else if (config.fallbackToNativeOnError) {
-            // Fall back to native — let the model handle it
             ctx.routerFallback = true;
             ctx.routerError = redactSecrets(result.output);
             recordFallback(result.output || "execution_failed");
