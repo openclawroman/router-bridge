@@ -184,25 +184,52 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     const start = Date.now();
     try {
       const binaryPath = this.routerCommand.split(" ")[0];
-      const exists = fs.existsSync(binaryPath);
-      return {
-        name: "binary_exists",
-        passed: exists,
-        message: exists ? `Binary found: ${binaryPath}` : `Binary not found: ${binaryPath}`,
-        latencyMs: Date.now() - start,
-      };
+
+      // Absolute path — check filesystem directly
+      if (binaryPath.startsWith("/")) {
+        const exists = fs.existsSync(binaryPath);
+        if (!exists) this.lastError = `Binary not found: ${binaryPath}`;
+        return {
+          name: "binary_exists",
+          passed: exists,
+          message: exists ? `Binary found: ${binaryPath}` : `Binary not found: ${binaryPath}`,
+          latencyMs: Date.now() - start,
+        };
+      }
+
+      // Relative name — check PATH via 'which'
+      try {
+        const resolved = execSync(`which ${binaryPath}`, { encoding: "utf-8" }).trim();
+        if (!resolved) throw new Error("empty output");
+        return {
+          name: "binary_exists",
+          passed: true,
+          message: `Binary found in PATH: ${resolved}`,
+          latencyMs: Date.now() - start,
+        };
+      } catch {
+        this.lastError = `Binary '${binaryPath}' not found in PATH`;
+        return {
+          name: "binary_exists",
+          passed: false,
+          message: `Binary '${binaryPath}' not found in PATH`,
+          latencyMs: Date.now() - start,
+        };
+      }
     } catch (err: any) {
+      this.lastError = err.message;
       return { name: "binary_exists", passed: false, message: err.message, latencyMs: Date.now() - start };
     }
   }
 
   private checkConfigValid(): HealthCheckResult {
     const start = Date.now();
-    if (!this.routerConfigPath) {
+    if (!this.routerConfigPath || !this.routerConfigPath.trim()) {
       return { name: "config_valid", passed: true, message: "No config path set (using defaults)", latencyMs: Date.now() - start };
     }
     try {
       const exists = fs.existsSync(this.routerConfigPath);
+      if (!exists) this.lastError = `Config not found: ${this.routerConfigPath}`;
       return {
         name: "config_valid",
         passed: exists,
@@ -210,19 +237,33 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         latencyMs: Date.now() - start,
       };
     } catch (err: any) {
+      this.lastError = err.message;
       return { name: "config_valid", passed: false, message: err.message, latencyMs: Date.now() - start };
     }
   }
 
   private checkEnvSufficient(): HealthCheckResult {
     const start = Date.now();
-    const pathEnv = process.env.PATH || "";
-    const binaryDir = this.routerCommand.split(" ")[0].split("/").slice(0, -1).join("/");
-    const onPath = !binaryDir || binaryDir.startsWith("/") ? true : pathEnv.includes(binaryDir);
+    const issues: string[] = [];
+
+    // Check PATH is set
+    if (!process.env.PATH) {
+      issues.push("PATH not set");
+    }
+
+    // Check writable temp dir
+    const tmpDir = process.env.TMPDIR || "/tmp";
+    try {
+      fs.accessSync(tmpDir, fs.constants.W_OK);
+    } catch {
+      issues.push(`Temp dir '${tmpDir}' not writable`);
+    }
+
+    const passed = issues.length === 0;
     return {
       name: "env_sufficient",
-      passed: true,
-      message: onPath ? "Environment OK" : `Binary dir '${binaryDir}' may not be in PATH`,
+      passed,
+      message: passed ? "Environment OK" : `Issues: ${issues.join("; ")}`,
       latencyMs: Date.now() - start,
     };
   }

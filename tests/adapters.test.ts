@@ -3,7 +3,7 @@ import { SubprocessRouterAdapter, AcpRouterAdapter } from "../src/adapters";
 import type { TaskEnvelope } from "../src/adapters";
 
 describe("Health diagnostics", () => {
-  it("binary check detects missing binary", async () => {
+  it("binary check detects missing absolute binary", async () => {
     const adapter = new SubprocessRouterAdapter({
       routerCommand: "/nonexistent/binary",
       routerConfigPath: "/tmp/test.yaml",
@@ -11,10 +11,11 @@ describe("Health diagnostics", () => {
     });
     const result = await adapter.health();
     expect(result.healthy).toBe(false);
-    expect(result.output).toContain("failed");
+    expect(result.output).toContain("binary_exists");
+    expect(result.output).toContain("not found");
   });
 
-  it("config check detects missing config", async () => {
+  it("config check detects missing config (PATH binary should pass)", async () => {
     const adapter = new SubprocessRouterAdapter({
       routerCommand: "echo",
       routerConfigPath: "/nonexistent/config.yaml",
@@ -22,36 +23,58 @@ describe("Health diagnostics", () => {
     });
     const result = await adapter.health();
     expect(result.healthy).toBe(false);
-    expect(result.output).toContain("failed");
+    // "echo" resolves via PATH, so only config_valid should fail
+    expect(result.output).toContain("config_valid");
   });
 
-  it("health returns diagnostic output", async () => {
+  it("health returns diagnostic output with check details", async () => {
     const adapter = new SubprocessRouterAdapter({
       routerCommand: "/nonexistent/binary",
-      routerConfigPath: "/tmp/test.yaml",
+      routerConfigPath: "",
       healthCacheTtlMs: 0,
     });
     const result = await adapter.health();
     expect(result.output).toBeTruthy();
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    // Should show failure count
+    expect(result.output).toContain("checks failed");
   });
 
   it("getLastHealthError returns null initially", () => {
     const adapter = new SubprocessRouterAdapter({
       routerCommand: "echo",
-      routerConfigPath: "/tmp/test.yaml",
+      routerConfigPath: "",
       healthCacheTtlMs: 0,
     });
     expect(adapter.getLastHealthError()).toBeNull();
   });
 
-  it("getLastHealthError tracks last error", () => {
+  it("getLastHealthError tracks last error from health failure", async () => {
+    // Review fix: actually trigger a health failure
     const adapter = new SubprocessRouterAdapter({
-      routerCommand: "echo",
-      routerConfigPath: "/tmp/test.yaml",
+      routerCommand: "/nonexistent/binary",
+      routerConfigPath: "",
       healthCacheTtlMs: 0,
     });
     expect(adapter.getLastHealthError()).toBeNull();
+    await adapter.health();
+    const error = adapter.getLastHealthError();
+    expect(error).not.toBeNull();
+    expect(error).toContain("/nonexistent/binary");
+  });
+
+  it("checkBinaryExists resolves PATH binaries", async () => {
+    // "ls" should exist on macOS/Linux and pass binary_exists check
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: "ls",
+      routerConfigPath: "",
+      healthCacheTtlMs: 0,
+    });
+    const result = await adapter.health();
+    // ls resolves via PATH — only subprocess_health should fail (--health flag doesn't exist)
+    // The output shows failed checks, binary_exists should NOT be among them
+    expect(result.output).toContain("subprocess_health");
+    expect(result.output).not.toContain("binary_exists");
   });
 });
 

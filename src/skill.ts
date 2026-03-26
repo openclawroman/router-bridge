@@ -20,7 +20,8 @@ const ENABLE_PATTERNS = [
 const DISABLE_PATTERNS = [
   /turn off router/i,
   /disable router/i,
-  /use native/i,
+  /use native (routing|backend)/i,
+  /switch to native/i,
   /stop using router/i,
   /deactivate router backend/i,
 ];
@@ -56,7 +57,7 @@ export function matchRouterIntent(input: string): SkillMatch {
  * Handle a natural-language router request by delegating to the same
  * command handlers that /router on|off|status uses.
  */
-export function handleRouterIntent(input: string, ctx: any, config: PluginConfig): { text: string } | null {
+export async function handleRouterIntent(input: string, ctx: any, config: PluginConfig): Promise<{ text: string } | null> {
   const match = matchRouterIntent(input);
   if (!match.matched || !match.action) return null;
 

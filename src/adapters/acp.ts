@@ -33,6 +33,6 @@ export class AcpRouterAdapter implements RouterExecutionAdapter {
   }
 
   getLastHealthError(): string | null {
-    return "ACP adapter not yet implemented (Phase 2)";
+    return null; // Not an error — stub communicates via health().output
   }
 }
