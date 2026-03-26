@@ -38,9 +38,9 @@ describe("handleRouterOff", () => {
 });
 
 describe("handleRouterStatus", () => {
-  it("returns status message with config details", () => {
+  it("returns status message with config details", async () => {
     const ctx = { threadId: "t123", sessionKey: "s456" };
-    const result = handleRouterStatus(ctx);
+    const result = await handleRouterStatus(ctx);
     expect(result.text).toContain("Router Bridge Status");
     expect(result.text).toContain("Backend:");
     expect(result.text).toContain("Scope:");
@@ -54,33 +54,33 @@ describe("handleRouterStatus", () => {
 describe("handleRouterCommand dispatch", () => {
   const ctx = { threadId: "t1", sessionKey: "s1" };
 
-  it('"on" dispatches to handleRouterOn', () => {
-    const result = handleRouterCommand("on", ctx);
+  it('"on" dispatches to handleRouterOn', async () => {
+    const result = await handleRouterCommand("on", ctx);
     expect(result.text).toContain("Router backend enabled");
   });
 
-  it('"off" dispatches to handleRouterOff', () => {
-    const result = handleRouterCommand("off", ctx);
+  it('"off" dispatches to handleRouterOff', async () => {
+    const result = await handleRouterCommand("off", ctx);
     expect(result.text).toContain("Router backend disabled");
   });
 
-  it('"status" dispatches to handleRouterStatus', () => {
-    const result = handleRouterCommand("status", ctx);
+  it('"status" dispatches to handleRouterStatus', async () => {
+    const result = await handleRouterCommand("status", ctx);
     expect(result.text).toContain("Router Bridge Status");
   });
 
-  it('"" (empty) defaults to status', () => {
-    const result = handleRouterCommand("", ctx);
+  it('"" (empty) defaults to status', async () => {
+    const result = await handleRouterCommand("", ctx);
     expect(result.text).toContain("Router Bridge Status");
   });
 
-  it("undefined args defaults to status", () => {
-    const result = handleRouterCommand(undefined, ctx);
+  it("undefined args defaults to status", async () => {
+    const result = await handleRouterCommand(undefined, ctx);
     expect(result.text).toContain("Router Bridge Status");
   });
 
-  it('"bogus" returns error message', () => {
-    const result = handleRouterCommand("bogus", ctx);
+  it('"bogus" returns error message', async () => {
+    const result = await handleRouterCommand("bogus", ctx);
     expect(result.text).toContain("Unknown subcommand: bogus");
     expect(result.text).toContain("/router [on|off|status]");
   });
@@ -119,26 +119,33 @@ describe("scope resolution", () => {
 });
 
 describe("health check integration", () => {
-  it("handleRouterStatus includes health info when healthy", () => {
+  it("handleRouterStatus includes health info via adapter", async () => {
     const ctx = { threadId: "t1", sessionKey: "s1" };
-    const result = handleRouterStatus(ctx);
-    // Status should contain health-related info
+    const result = await handleRouterStatus(ctx);
     expect(result.text).toContain("Router Bridge Status");
     expect(result.text).toContain("Backend:");
     expect(result.text).toContain("Health:");
   });
 
-  it("handleRouterStatus includes fallback policy", () => {
+  it("handleRouterStatus includes fallback policy", async () => {
     const ctx = { threadId: "t1", sessionKey: "s1" };
-    const result = handleRouterStatus(ctx);
+    const result = await handleRouterStatus(ctx);
     expect(result.text).toContain("Fallback");
   });
 
-  it("handleRouterStatus shows config details", () => {
+  it("handleRouterStatus shows config details", async () => {
     const ctx = { threadId: "t1", sessionKey: "s1" };
-    const result = handleRouterStatus(ctx);
+    const result = await handleRouterStatus(ctx);
     expect(result.text).toContain("Scope mode:");
     expect(result.text).toContain("Router command:");
     expect(result.text).toContain("Health cache TTL:");
+  });
+
+  it("handleRouterStatus with native backend shows healthy", async () => {
+    const ctx = { threadId: "t1", sessionKey: "s1" };
+    const config = { ...DEFAULT_CONFIG, backendMode: ExecutionBackend.Native };
+    const result = await handleRouterStatus(ctx, config);
+    expect(result.text).toContain("Health:");
+    expect(result.text).toContain("healthy");
   });
 });

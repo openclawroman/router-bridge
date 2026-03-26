@@ -123,5 +123,32 @@ describe("RouterExecutionAdapter interface", () => {
       } as any);
       expect(adapter.supportsPersistentSession()).toBe(true);
     });
+
+    it("creates NativeAdapter for native mode", async () => {
+      const { createAdapter } = await import("../src/adapters/factory");
+      const adapter = createAdapter({
+        backendMode: "native",
+        scopeMode: "thread",
+        routerCommand: "echo",
+        routerConfigPath: "/tmp/test.yaml",
+        fallbackToNativeOnError: true,
+        healthCacheTtlMs: 30000,
+      } as any);
+      const health = await adapter.health();
+      expect(health.healthy).toBe(true);
+      expect(health.output).toContain("native");
+    });
+
+    it("throws for unknown backendMode", async () => {
+      const { createAdapter } = await import("../src/adapters/factory");
+      expect(() => createAdapter({
+        backendMode: "invalid-mode",
+        scopeMode: "thread",
+        routerCommand: "echo",
+        routerConfigPath: "/tmp/test.yaml",
+        fallbackToNativeOnError: true,
+        healthCacheTtlMs: 30000,
+      } as any)).toThrow("Unknown backendMode");
+    });
   });
 });

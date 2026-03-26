@@ -1,6 +1,7 @@
-import { execSync } from "child_process";
 import { ExecutionBackend, ScopeType, PluginConfig, DEFAULT_CONFIG } from "./types";
 import { ExecutionBackendStore } from "./store";
+import { createAdapter } from "./adapters/factory";
+import type { HealthResult } from "./adapters/base";
 
 const store = new ExecutionBackendStore();
 
@@ -28,48 +29,6 @@ function resolveScope(ctx: any, config: PluginConfig): { scopeType: ScopeType; s
 
 export { resolveScope, store };
 
-// ── Health check with TTL cache ─────────────────────────────────────────────
-interface HealthResult {
-  healthy: boolean;
-  output: string;
-  latencyMs: number;
-}
-
-const healthCache = new Map<string, { result: HealthResult; timestamp: number }>();
-
-function getHealthCacheKey(config: PluginConfig): string {
-  return config.routerCommand;
-}
-
-export function checkRouterHealth(config: PluginConfig): HealthResult {
-  const key = getHealthCacheKey(config);
-  const cached = healthCache.get(key);
-  if (cached && Date.now() - cached.timestamp < config.healthCacheTtlMs) {
-    return cached.result;
-  }
-
-  let result: HealthResult;
-  try {
-    const start = Date.now();
-    const output = execSync(`${config.routerCommand} --health`, {
-      timeout: 10000,
-      encoding: "utf-8",
-    }).trim();
-    const latencyMs = Date.now() - start;
-    result = { healthy: true, output, latencyMs };
-  } catch (err: any) {
-    const latencyMs = Date.now() - (Date.now()); // 0 for exec errors
-    result = {
-      healthy: false,
-      output: err.message || String(err),
-      latencyMs: 0,
-    };
-  }
-
-  healthCache.set(key, { result, timestamp: Date.now() });
-  return result;
-}
-
 export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const state = store.set(scopeType, scopeId, ExecutionBackend.RouterBridge);
@@ -96,12 +55,13 @@ export function handleRouterOff(ctx: any, config: PluginConfig = DEFAULT_CONFIG)
   };
 }
 
-export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
 
-  // Health check
-  const health = checkRouterHealth(config);
+  // Health check — delegates through adapter (single source of truth)
+  const adapter = createAdapter(config);
+  const health = await adapter.health();
   const healthIcon = health.healthy ? "✅ healthy" : "❌ unavailable";
   const healthLine = `Health: ${healthIcon} (${health.latencyMs}ms)`;
   const healthOutput = `  Output: ${health.output}`;
@@ -147,7 +107,7 @@ export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONF
   return { text: lines.join("\n") };
 }
 
-export function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+export async function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const sub = (args || "").trim().toLowerCase();
   switch (sub) {
     case "on":

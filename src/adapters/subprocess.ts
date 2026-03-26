@@ -47,41 +47,61 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
 
   async execute(envelope: TaskEnvelope): Promise<ExecuteResult> {
     const start = Date.now();
-    try {
-      // Build command with task input via stdin
-      const child = spawn(this.routerCommand, ["--config", this.routerConfigPath, "route"], {
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+    return new Promise((resolve) => {
+      let settled = false;
 
-      // Write task envelope to stdin
-      child.stdin.write(JSON.stringify(envelope));
-      child.stdin.end();
-
-      // Collect output
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-      child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-
-      const exitCode = await new Promise<number>((resolve) => {
-        child.on("error", () => resolve(1));
-        child.on("close", (code) => resolve(code ?? 1));
-      });
-
-      return {
-        success: exitCode === 0,
-        output: stdout || stderr,
-        exitCode,
-        durationMs: Date.now() - start,
+      const done = (result: ExecuteResult) => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
       };
-    } catch (err: any) {
-      return {
-        success: false,
-        output: err.message || String(err),
-        exitCode: 1,
-        durationMs: Date.now() - start,
-      };
-    }
+
+      try {
+        const child = spawn(this.routerCommand, ["--config", this.routerConfigPath, "route"], {
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+
+        // Write task envelope to stdin with EPIPE guard
+        try {
+          child.stdin.write(JSON.stringify(envelope));
+          child.stdin.end();
+        } catch {
+          // EPIPE — child already exited, will be handled by error/close events
+        }
+
+        // Collect output
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+        child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+        child.on("error", () => {
+          done({
+            success: false,
+            output: stderr || stdout || "Process spawn failed",
+            exitCode: 1,
+            durationMs: Date.now() - start,
+          });
+        });
+
+        child.on("close", (code) => {
+          done({
+            success: code === 0,
+            output: stdout || stderr,
+            exitCode: code ?? 1,
+            durationMs: Date.now() - start,
+          });
+        });
+      } catch (err: any) {
+        done({
+          success: false,
+          output: err.message || String(err),
+          exitCode: 1,
+          durationMs: Date.now() - start,
+        });
+      }
+    });
   }
 
   supportsPersistentSession(): boolean {
