@@ -134,6 +134,118 @@ describe("ExecutionBackendStore", () => {
     });
   });
 
+  describe("corrupt file recovery", () => {
+    it("recovers gracefully from invalid JSON", () => {
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, "{{not valid json!!!");
+
+      // Should not throw, returns empty
+      const result = store.get(ScopeType.Thread, "any");
+      expect(result).toBeNull();
+    });
+
+    it("recovers from empty file", () => {
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, "");
+
+      const result = store.get(ScopeType.Thread, "any");
+      expect(result).toBeNull();
+    });
+
+    it("recovers from whitespace-only file", () => {
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, "   \n\t  ");
+
+      const result = store.get(ScopeType.Thread, "any");
+      expect(result).toBeNull();
+    });
+
+    it("set() works after corrupt file recovery", () => {
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, "CORRUPTED");
+
+      store.set(ScopeType.Thread, "t1", ExecutionBackend.RouterBridge);
+      const fetched = store.get(ScopeType.Thread, "t1");
+      expect(fetched).not.toBeNull();
+      expect(fetched!.executionBackend).toBe(ExecutionBackend.RouterBridge);
+    });
+  });
+
+  describe("atomic writes", () => {
+    it("state file is valid JSON after write", () => {
+      store.set(ScopeType.Thread, "t-atomic", ExecutionBackend.RouterBridge);
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const raw = fs.readFileSync(statePath, "utf-8");
+      const parsed = JSON.parse(raw);
+      expect(parsed["thread:t-atomic"]).toBeDefined();
+      expect(parsed["thread:t-atomic"].executionBackend).toBe("router-bridge");
+    });
+
+    it("no .tmp files left after write", () => {
+      store.set(ScopeType.Thread, "t-clean", ExecutionBackend.RouterBridge);
+      const dir = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge");
+      const files = fs.readdirSync(dir);
+      const tmpFiles = files.filter(f => f.includes(".tmp."));
+      expect(tmpFiles).toHaveLength(0);
+    });
+  });
+
+  describe("metadata preservation", () => {
+    it("set() preserves threadId from existing state", () => {
+      // First set with a store that has threadId (simulating commands.ts pattern)
+      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({
+        "thread:t1": {
+          executionBackend: "native",
+          scopeType: "thread",
+          scopeId: "t1",
+          threadId: "tid-999",
+          sessionId: "sid-888",
+          targetHarnessId: "harness-777",
+        }
+      }, null, 2));
+
+      // Switch backend — metadata should be preserved
+      store.set(ScopeType.Thread, "t1", ExecutionBackend.RouterBridge);
+      const fetched = store.get(ScopeType.Thread, "t1");
+      expect(fetched).not.toBeNull();
+      expect(fetched!.executionBackend).toBe(ExecutionBackend.RouterBridge);
+      expect(fetched!.threadId).toBe("tid-999");
+      expect(fetched!.sessionId).toBe("sid-888");
+      expect(fetched!.targetHarnessId).toBe("harness-777");
+    });
+
+    it("set() initializes null metadata when no existing state", () => {
+      const result = store.set(ScopeType.Thread, "fresh", ExecutionBackend.RouterAcp);
+      expect(result.threadId).toBeNull();
+      expect(result.sessionId).toBeNull();
+      expect(result.targetHarnessId).toBeNull();
+    });
+  });
+
+  describe("getEffective edge cases", () => {
+    it("with only threadId (no sessionId) skips session check", () => {
+      store.set(ScopeType.Thread, "tid-only", ExecutionBackend.RouterBridge);
+      store.set(ScopeType.Global, "default", ExecutionBackend.RouterAcp);
+
+      const effective = store.getEffective(ScopeType.Global, "default", "tid-only");
+      expect(effective.executionBackend).toBe(ExecutionBackend.RouterBridge);
+    });
+
+    it("with only sessionId (no threadId) falls to session", () => {
+      store.set(ScopeType.Session, "sid-only", ExecutionBackend.RouterBridge);
+      store.set(ScopeType.Global, "default", ExecutionBackend.RouterAcp);
+
+      const effective = store.getEffective(ScopeType.Global, "default", undefined, "sid-only");
+      expect(effective.executionBackend).toBe(ExecutionBackend.RouterBridge);
+    });
+  });
+
   describe("multiple scopes", () => {
     it("are independent", () => {
       store.set(ScopeType.Thread, "t1", ExecutionBackend.RouterBridge);

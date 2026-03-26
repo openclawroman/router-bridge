@@ -10,17 +10,26 @@ function getStateFilePath(): string {
 }
 
 function loadAll(): Record<string, RouterState> {
+  const filePath = getStateFilePath();
   try {
-    return JSON.parse(fs.readFileSync(getStateFilePath(), "utf-8"));
-  } catch {
-    return {};
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (raw.trim() === "") return {};
+    return JSON.parse(raw);
+  } catch (err: any) {
+    if (err.code === "ENOENT") return {};
+    if (err instanceof SyntaxError) return {};
+    throw err;
   }
 }
 
 function saveAll(states: Record<string, RouterState>): void {
-  const dir = path.dirname(getStateFilePath());
+  const filePath = getStateFilePath();
+  const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(getStateFilePath(), JSON.stringify(states, null, 2));
+
+  const tmpPath = filePath + ".tmp." + process.pid;
+  fs.writeFileSync(tmpPath, JSON.stringify(states, null, 2));
+  fs.renameSync(tmpPath, filePath);
 }
 
 function scopeKey(scopeType: ScopeType, scopeId: string): string {
