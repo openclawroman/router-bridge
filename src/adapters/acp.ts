@@ -31,4 +31,8 @@ export class AcpRouterAdapter implements RouterExecutionAdapter {
   async closeScope(_scopeId: string): Promise<void> {
     // Stub — will close ACP session in Phase 2
   }
+
+  getLastHealthError(): string | null {
+    return null; // Not an error — stub communicates via health().output
+  }
 }

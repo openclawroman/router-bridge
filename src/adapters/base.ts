@@ -4,6 +4,13 @@ export interface HealthResult {
   latencyMs: number;
 }
 
+export interface HealthCheckResult {
+  name: string;
+  passed: boolean;
+  message: string;
+  latencyMs: number;
+}
+
 export interface TaskMeta {
   type: "coding" | "review" | "planning" | "chat" | "other";
   priority?: "low" | "medium" | "high" | "critical";
@@ -68,4 +75,7 @@ export interface RouterExecutionAdapter {
 
   /** Clean up resources for a scope. No-op for subprocess, session.close() for ACP */
   closeScope(scopeId: string): Promise<void>;
+
+  /** Get the last error from health or execute, or null if none */
+  getLastHealthError?(): string | null;
 }

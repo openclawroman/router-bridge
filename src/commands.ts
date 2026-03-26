@@ -66,6 +66,10 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
   const healthLine = `Health: ${healthIcon} (${health.latencyMs}ms)`;
   const healthOutput = `  Output: ${health.output}`;
 
+  // Last error display
+  const lastError = adapter.getLastHealthError?.() ?? null;
+  const errorLine = lastError ? `\n⚠️ Last error: ${lastError}` : "";
+
   // Backend status
   const backendStatus = effective.executionBackend === ExecutionBackend.RouterBridge
     ? (health.healthy ? "active" : "unavailable")
@@ -88,6 +92,7 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
     "",
     healthLine,
     healthOutput,
+    errorLine,
     "",
     "**Config:**",
     `Scope mode: ${config.scopeMode}`,
