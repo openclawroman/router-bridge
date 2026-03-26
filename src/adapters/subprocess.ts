@@ -64,6 +64,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
 
       const exitCode = await new Promise<number>((resolve) => {
+        child.on("error", () => resolve(1));
         child.on("close", (code) => resolve(code ?? 1));
       });
 

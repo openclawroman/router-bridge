@@ -117,3 +117,28 @@ describe("scope resolution", () => {
     expect(result.text).toContain("session:s1");
   });
 });
+
+describe("health check integration", () => {
+  it("handleRouterStatus includes health info when healthy", () => {
+    const ctx = { threadId: "t1", sessionKey: "s1" };
+    const result = handleRouterStatus(ctx);
+    // Status should contain health-related info
+    expect(result.text).toContain("Router Bridge Status");
+    expect(result.text).toContain("Backend:");
+    expect(result.text).toContain("Health:");
+  });
+
+  it("handleRouterStatus includes fallback policy", () => {
+    const ctx = { threadId: "t1", sessionKey: "s1" };
+    const result = handleRouterStatus(ctx);
+    expect(result.text).toContain("Fallback");
+  });
+
+  it("handleRouterStatus shows config details", () => {
+    const ctx = { threadId: "t1", sessionKey: "s1" };
+    const result = handleRouterStatus(ctx);
+    expect(result.text).toContain("Scope mode:");
+    expect(result.text).toContain("Router command:");
+    expect(result.text).toContain("Health cache TTL:");
+  });
+});
