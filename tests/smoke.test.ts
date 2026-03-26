@@ -18,7 +18,7 @@ describe("smoke tests", () => {
 
     // Check status while on
     const statusOn = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(statusOn.text).toContain("router-bridge");
+    expect(statusOn.text).toContain("Router Bridge Status");
     expect(statusOn.text).toContain("Metrics:");
     expect(statusOn.text).toContain("Recovery:");
     expect(statusOn.text).toContain("Version:");
