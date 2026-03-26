@@ -31,4 +31,8 @@ export class AcpRouterAdapter implements RouterExecutionAdapter {
   async closeScope(_scopeId: string): Promise<void> {
     // Stub — will close ACP session in Phase 2
   }
+
+  getLastHealthError(): string | null {
+    return "ACP adapter not yet implemented (Phase 2)";
+  }
 }
