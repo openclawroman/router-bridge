@@ -34,8 +34,8 @@ export interface PluginConfig {
 export const DEFAULT_CONFIG: PluginConfig = {
   backendMode: ExecutionBackend.Native,
   scopeMode: ScopeType.Thread,
-  routerCommand: "python3 /tmp/openclaw-router/cli.py",
-  routerConfigPath: "/tmp/openclaw-router/config/router.yaml",
+  routerCommand: "python3 /tmp/openclaw-router/bin/ai-code-runner",
+  routerConfigPath: "/tmp/openclaw-router/config/router.config.json",
   fallbackToNativeOnError: true,
   healthCacheTtlMs: 30000,
   targetHarnessId: "default",
