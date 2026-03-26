@@ -1,5 +1,36 @@
 import { execSync, spawn } from "child_process";
-import type { RouterExecutionAdapter, HealthResult, TaskEnvelope, ExecuteResult } from "./base";
+import type { RouterExecutionAdapter, HealthResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
+
+/** Payload sent to the router CLI via stdin */
+interface RouterPayload {
+  task: string;
+  task_id: string;
+  task_meta: TaskMeta;
+  prompt: string;
+  attachments: Attachment[];
+  scope: {
+    scope_id: string;
+    thread_id: string | null;
+    session_id: string | null;
+  };
+  context: TaskContext;
+  timeout_ms: number;
+  max_tokens?: number;
+}
+
+/** Expected JSON structure from router CLI stdout */
+interface RouterResponse {
+  success: boolean;
+  output: string;
+  error?: string;
+  tokens_used?: number;
+  cost_usd?: number;
+  model?: string;
+  duration_ms?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 60_000;
+const MAX_STDOUT_LOG = 500;
 
 export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   private routerCommand: string;
@@ -46,54 +77,83 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   }
 
   async execute(envelope: TaskEnvelope): Promise<ExecuteResult> {
+    const timeoutMs = (envelope.metadata?.timeoutMs as number) ?? DEFAULT_TIMEOUT_MS;
     const start = Date.now();
+
+    const payload = this.buildPayload(envelope, timeoutMs);
+
     return new Promise((resolve) => {
       let settled = false;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
       const done = (result: ExecuteResult) => {
         if (!settled) {
           settled = true;
+          if (timeoutHandle) clearTimeout(timeoutHandle);
           resolve(result);
         }
       };
 
       try {
-        const child = spawn(this.routerCommand, ["--config", this.routerConfigPath, "route"], {
+        const args = ["--config", this.routerConfigPath, "route"];
+        const child = spawn(this.routerCommand, args, {
           stdio: ["pipe", "pipe", "pipe"],
         });
 
-        // Write task envelope to stdin with EPIPE guard
-        try {
-          child.stdin.write(JSON.stringify(envelope));
-          child.stdin.end();
-        } catch {
-          // EPIPE — child already exited, will be handled by error/close events
-        }
-
-        // Collect output
-        let stdout = "";
-        let stderr = "";
-        child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-        child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-
-        child.on("error", () => {
+        // ── Timeout handling ──────────────────────────────────────────
+        timeoutHandle = setTimeout(() => {
+          child.kill("SIGKILL");
           done({
             success: false,
-            output: stderr || stdout || "Process spawn failed",
+            output: `Router execution timed out after ${timeoutMs}ms`,
+            exitCode: 1,
+            durationMs: Date.now() - start,
+          });
+        }, timeoutMs);
+
+        // ── Write payload to stdin ────────────────────────────────────
+        child.stdin.on("error", () => {
+          // EPIPE — child already exited, will be handled by error/close events
+        });
+        try {
+          child.stdin.write(JSON.stringify(payload));
+          child.stdin.end();
+        } catch {
+          // EPIPE — child already exited, will be handled below
+        }
+
+        // ── Collect output ────────────────────────────────────────────
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (d: Buffer) => {
+          stdout += d.toString();
+        });
+        child.stderr.on("data", (d: Buffer) => {
+          stderr += d.toString();
+        });
+
+        // ── Error (spawn failure, ENOENT, etc.) ───────────────────────
+        child.on("error", (err: NodeJS.ErrnoException) => {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          const msg =
+            err.code === "ENOENT"
+              ? `Router CLI not found: ${this.routerCommand}`
+              : `Router spawn error: ${err.message}`;
+          done({
+            success: false,
+            output: msg,
             exitCode: 1,
             durationMs: Date.now() - start,
           });
         });
 
+        // ── Close ─────────────────────────────────────────────────────
         child.on("close", (code) => {
-          done({
-            success: code === 0,
-            output: stdout || stderr,
-            exitCode: code ?? 1,
-            durationMs: Date.now() - start,
-          });
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          done(this.normalizeResponse(code ?? 1, stdout, stderr, start));
         });
       } catch (err: any) {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
         done({
           success: false,
           output: err.message || String(err),
@@ -110,5 +170,107 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
 
   async closeScope(_scopeId: string): Promise<void> {
     // No-op for subprocess — nothing to clean up
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────
+
+  /** Build the full RouterPayload from a TaskEnvelope */
+  private buildPayload(envelope: TaskEnvelope, timeoutMs: number): RouterPayload {
+    const taskMeta: TaskMeta = envelope.taskMeta ?? { type: "other" };
+    const prompt = envelope.prompt ?? envelope.task;
+    const attachments: Attachment[] = envelope.attachments ?? [];
+    const context: TaskContext = envelope.context ?? {};
+
+    return {
+      task: envelope.task,
+      task_id: envelope.taskId,
+      task_meta: taskMeta,
+      prompt,
+      attachments,
+      scope: {
+        scope_id: envelope.scopeId,
+        thread_id: envelope.threadId ?? null,
+        session_id: envelope.sessionId ?? null,
+      },
+      context,
+      timeout_ms: timeoutMs,
+    };
+  }
+
+  /**
+   * Normalize raw process output into an ExecuteResult.
+   *
+   * Try JSON parse first; fall back to raw text with error mapping.
+   */
+  private normalizeResponse(
+    exitCode: number,
+    stdout: string,
+    stderr: string,
+    start: number,
+  ): ExecuteResult {
+    const durationMs = Date.now() - start;
+
+    // ── Attempt JSON parse ────────────────────────────────────────────
+    const trimmed = stdout.trim();
+    if (trimmed) {
+      try {
+        const parsed: RouterResponse = JSON.parse(trimmed);
+        if (typeof parsed.success === "boolean") {
+          return {
+            success: parsed.success,
+            output: parsed.output ?? parsed.error ?? "",
+            exitCode: parsed.success ? 0 : exitCode ?? 1,
+            durationMs: parsed.duration_ms ?? durationMs,
+            costEstimateUsd: parsed.cost_usd,
+            tokensUsed: parsed.tokens_used,
+            model: parsed.model,
+          };
+        }
+      } catch {
+        // JSON parse failed — fall through to raw handling
+      }
+    }
+
+    // ── Non-zero exit with no output ──────────────────────────────────
+    if (exitCode !== 0 && !trimmed && !stderr.trim()) {
+      return {
+        success: false,
+        output: `Router exited with code ${exitCode}, no output`,
+        exitCode,
+        durationMs,
+      };
+    }
+
+    // ── Non-zero exit with stderr ─────────────────────────────────────
+    if (exitCode !== 0) {
+      return {
+        success: false,
+        output: stderr.trim() || trimmed || `Router exited with code ${exitCode}`,
+        exitCode,
+        durationMs,
+      };
+    }
+
+    // ── Exit 0 but non-JSON output ────────────────────────────────────
+    if (trimmed) {
+      const truncated =
+        trimmed.length > MAX_STDOUT_LOG
+          ? trimmed.slice(0, MAX_STDOUT_LOG) + "…[truncated]"
+          : trimmed;
+      return {
+        success: true,
+        output: truncated,
+        exitCode: 0,
+        durationMs,
+      };
+    }
+
+    // ── Exit 0, no stdout, maybe stderr ───────────────────────────────
+    return {
+      success: true,
+      output: stderr.trim() || "",
+      exitCode: 0,
+      durationMs,
+    };
   }
 }

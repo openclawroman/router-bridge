@@ -4,12 +4,45 @@ export interface HealthResult {
   latencyMs: number;
 }
 
+export interface TaskMeta {
+  type: "coding" | "review" | "planning" | "chat" | "other";
+  priority?: "low" | "medium" | "high" | "critical";
+  repoPath?: string;
+  branch?: string;
+  language?: string;
+  framework?: string;
+}
+
+export interface Attachment {
+  name: string;
+  content: string;
+  mimeType?: string;
+  encoding?: "utf8" | "base64";
+}
+
+export interface TaskContext {
+  workingDirectory?: string;
+  environmentVars?: Record<string, string>;
+  recentFiles?: string[];
+  gitBranch?: string;
+  gitCommit?: string;
+}
+
 export interface TaskEnvelope {
+  // Core
   task: string;
   taskId: string;
   scopeId: string;
+
+  // Scope identity
   threadId?: string;
   sessionId?: string;
+
+  // Rich payload
+  taskMeta?: TaskMeta;
+  prompt?: string;
+  attachments?: Attachment[];
+  context?: TaskContext;
   metadata?: Record<string, unknown>;
 }
 
@@ -19,6 +52,8 @@ export interface ExecuteResult {
   exitCode: number;
   durationMs: number;
   costEstimateUsd?: number;
+  tokensUsed?: number;
+  model?: string;
 }
 
 export interface RouterExecutionAdapter {
