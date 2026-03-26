@@ -8,22 +8,23 @@ import { ExecutionBackendStore } from "../src/store";
 
 // Use an isolated temp dir so parallel test files don't stomp our state
 const TMP_DIR = path.join(os.tmpdir(), `router-bridge-policy-scope-test-${process.pid}-${Date.now()}`);
-const STATE_FILE = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+const ISOLATED_ROUTER_ROOT = path.join(TMP_DIR, ".openclaw", "router");
+const STATE_FILE = path.join(ISOLATED_ROUTER_ROOT, "runtime", "bridge", "state.json");
 
-const ORIGINAL_ENV = process.env.OPENCLAW_WORKSPACE;
+const ORIGINAL_ROUTER_ROOT = process.env.OPENCLAW_ROUTER_ROOT;
 
 beforeEach(() => {
-  // Point the store at our isolated temp dir
-  process.env.OPENCLAW_WORKSPACE = TMP_DIR;
+  // Point the store at our isolated temp dir via OPENCLAW_ROUTER_ROOT
+  process.env.OPENCLAW_ROUTER_ROOT = ISOLATED_ROUTER_ROOT;
   try { fs.unlinkSync(STATE_FILE); } catch {}
 });
 
 afterEach(() => {
   // Restore original env
-  if (ORIGINAL_ENV) {
-    process.env.OPENCLAW_WORKSPACE = ORIGINAL_ENV;
+  if (ORIGINAL_ROUTER_ROOT) {
+    process.env.OPENCLAW_ROUTER_ROOT = ORIGINAL_ROUTER_ROOT;
   } else {
-    delete process.env.OPENCLAW_WORKSPACE;
+    delete process.env.OPENCLAW_ROUTER_ROOT;
   }
   try { fs.unlinkSync(STATE_FILE); } catch {}
 });

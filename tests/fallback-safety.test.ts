@@ -1,6 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import { shouldDelegateToExecutionBackend } from "../src/policy";
 import { ExecutionBackend, ScopeType, DEFAULT_CONFIG } from "../src/types";
+
+const ISOLATED_ROUTER_ROOT = path.join(os.tmpdir(), `router-bridge-fallback-test-${process.pid}-${Date.now()}`, ".openclaw", "router");
+const STATE_FILE = path.join(ISOLATED_ROUTER_ROOT, "runtime", "bridge", "state.json");
+
+beforeEach(() => {
+  process.env.OPENCLAW_ROUTER_ROOT = ISOLATED_ROUTER_ROOT;
+  try { fs.unlinkSync(STATE_FILE); } catch {}
+});
+
+afterEach(() => {
+  delete process.env.OPENCLAW_ROUTER_ROOT;
+  try { fs.unlinkSync(STATE_FILE); } catch {}
+});
 
 describe("fallback safety (Phase 2 invariant)", () => {
   it("falls back to native when router binary missing", async () => {

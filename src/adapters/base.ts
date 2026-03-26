@@ -84,3 +84,36 @@ export interface RouterExecutionAdapter {
   /** Get the last error from health or execute, or null if none */
   getLastHealthError?(): string | null;
 }
+
+/**
+ * ── ACP-Ready Interfaces (Phase 2 preparation) ────────────────────
+ * These interfaces define the contract for future persistent session
+ * execution via ACP (Agent Communication Protocol).
+ */
+
+export interface SessionBinding {
+  threadId: string;
+  sessionId: string | null;
+  acpSessionKey: string | null;
+  boundAt: string;
+}
+
+export interface ContinuationToken {
+  taskId: string;
+  previousTaskId: string | null;
+  context: Record<string, any>;
+}
+
+export interface SessionHealthProbe {
+  sessionId: string;
+  healthy: boolean;
+  lastChecked: string;
+  latencyMs: number;
+}
+
+export interface PersistentAdapter extends RouterExecutionAdapter {
+  startSession(binding: SessionBinding): Promise<string>;
+  endSession(sessionId: string): Promise<void>;
+  continueExecution(token: ContinuationToken): Promise<ExecuteResult>;
+  sessionHealth(sessionId: string): Promise<SessionHealthProbe>;
+}

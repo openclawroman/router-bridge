@@ -6,7 +6,7 @@ describe("runDoctor", () => {
   it("returns an array of checks", () => {
     const checks = runDoctor(DEFAULT_CONFIG);
     expect(Array.isArray(checks)).toBe(true);
-    expect(checks.length).toBe(6);
+    expect(checks.length).toBe(7);
   });
 
   it("each check has name, passed, message", () => {

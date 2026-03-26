@@ -93,6 +93,11 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
     `Scope: ${effective.scopeType}:${effective.scopeId}`,
     `Thread: ${effective.threadId ?? "—"}`,
     `Session: ${effective.sessionId ?? "—"}`,
+  ];
+
+  if (backendLine) lines.push(backendLine);
+
+  lines.push(
     "",
     healthLine,
     healthOutput,
@@ -105,31 +110,29 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
     `Health cache TTL: ${config.healthCacheTtlMs}ms`,
     "",
     `Fallback policy: ${fallbackPolicy}`,
-  ];
-
-  if (backendLine) lines.splice(6, 0, backendLine);
+  );
 
   if (effective.executionBackend === ExecutionBackend.RouterAcp) {
     lines.push(`ACP target: ${effective.targetHarnessId ?? "—"}`);
   }
 
-  // Rollout / Shadow status
-  lines.push("");
-  lines.push(`Rollout level: ${describeRolloutLevel(config.rolloutLevel)}`);
-  lines.push(`Shadow mode: ${config.shadowMode}`);
+  // ── Rollout / Shadow (from rollout module) ──────────────────────
+  try {
+    const { describeRolloutLevel } = require("./rollout");
+    lines.push("");
+    lines.push("**Rollout:**");
+    lines.push(`Level: ${describeRolloutLevel(config.rolloutLevel)}`);
+    lines.push(`Shadow: ${config.shadowMode}`);
+  } catch {
+    lines.push("");
+    lines.push(`Rollout level: ${describeRolloutLevel(config.rolloutLevel)}`);
+    lines.push(`Shadow mode: ${config.shadowMode}`);
+  }
 
-  // Runtime info
+  // ── Runtime info ────────────────────────────────────────────────
   const routerRoot = process.env.OPENCLAW_ROUTER_ROOT || path.join(process.env.HOME || "/root", ".openclaw", "router");
   const runtimeDir = path.join(routerRoot, "runtime");
   const runtimeExists = fs.existsSync(runtimeDir);
-
-  // Last fallback reason (if any)
-  const lastFallback = (ctx as any).routerFallback ? ((ctx as any).routerError || "unknown reason") : null;
-
-  // Last successful routed execution
-  const lastSuccess = (ctx as any).routerMetadata
-    ? `${(ctx as any).routerMetadata.backend} (${(ctx as any).routerMetadata.durationMs}ms)`
-    : null;
 
   // Provider availability (from doctor secrets check)
   const allDoctorChecks = runDoctor(config);
@@ -143,19 +146,61 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
   lines.push(`Install root: \`${routerRoot}\``);
   lines.push(`Runtime dir: ${runtimeExists ? "✅ exists" : "❌ missing"}`);
   lines.push(`Provider secrets: ${providerStatus}`);
-  if (lastFallback) {
-    lines.push(`Last fallback: ⚠️ ${lastFallback}`);
-  }
-  if (lastSuccess) {
-    lines.push(`Last success: ✅ ${lastSuccess}`);
+
+  // ── Metrics (graceful if module not available) ──────────────────
+  try {
+    const { getMetricsSummary, getMetrics } = require("./metrics");
+    const metrics = getMetrics();
+    lines.push("");
+    lines.push("**Metrics:**");
+    lines.push(getMetricsSummary());
+    if (metrics.lastSuccessAt) lines.push(`Last success: ${metrics.lastSuccessAt}`);
+    if (metrics.lastFallbackAt) lines.push(`Last fallback: ${metrics.lastFallbackAt} — ${metrics.lastFallbackReason}`);
+  } catch {
+    // Metrics module not available — show basic fallback info from context
+    const lastFallback = (ctx as any).routerFallback ? ((ctx as any).routerError || "unknown reason") : null;
+    const lastSuccess = (ctx as any).routerMetadata
+      ? `${(ctx as any).routerMetadata.backend} (${(ctx as any).routerMetadata.durationMs}ms)`
+      : null;
+    if (lastFallback) lines.push(`Last fallback: ⚠️ ${lastFallback}`);
+    if (lastSuccess) lines.push(`Last success: ✅ ${lastSuccess}`);
   }
 
-  // Doctor checks
+  // ── Auto-degrade (graceful if safety module not available) ──────
+  try {
+    const { checkAutoDegrade } = require("./safety");
+    const safety = checkAutoDegrade(config);
+    if (safety.shouldDegrade) {
+      lines.push("");
+      lines.push(`⚠️ AUTO-DEGRADED: ${safety.reason}`);
+    }
+  } catch {
+    // Safety module not available
+  }
+
+  // ── Security audit (graceful) ───────────────────────────────────
+  try {
+    const { auditSecurity } = require("./security");
+    const secAudit = auditSecurity();
+    lines.push("");
+    lines.push("**Security:**");
+    if (secAudit.passed) {
+      lines.push("✅ All security checks passed");
+    } else {
+      lines.push(`⚠️ ${secAudit.issues.length} issue(s):`);
+      for (const issue of secAudit.issues) {
+        lines.push(`  • ${issue}`);
+      }
+    }
+  } catch {
+    // Security module not available
+  }
+
+  // ── Doctor checks ───────────────────────────────────────────────
   const allPassed = allDoctorChecks.every(c => c.passed);
   lines.push("");
   lines.push(`Doctor: ${allPassed ? "✅ All checks passed" : "⚠️ Issues found"}`);
-  const doctorChecks = allDoctorChecks;
-  for (const check of doctorChecks) {
+  for (const check of allDoctorChecks) {
     lines.push(`  ${check.passed ? "✅" : "❌"} ${check.name}: ${check.message}`);
     if (!check.passed && check.details) {
       lines.push(`     → ${check.details}`);
@@ -269,6 +314,16 @@ export function handleRouterShadow(args: string | undefined, ctx: any, config: P
   return { text: `⚠️ Shadow mode change requested: ${modeArg}\nTo apply, update your plugin config:\n  "shadowMode": "${modeArg}"` };
 }
 
+export function handleRouterSnapshot(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+  try {
+    const { takeSnapshot, formatSnapshot } = require("./snapshot");
+    const snap = takeSnapshot(config);
+    return { text: formatSnapshot(snap) };
+  } catch {
+    return { text: "❌ Snapshot module not available" };
+  }
+}
+
 export async function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const sub = (args || "").trim().toLowerCase();
   switch (sub) {
@@ -287,6 +342,8 @@ export async function handleRouterCommand(args: string | undefined, ctx: any, co
     case "status":
     case "":
       return handleRouterStatus(ctx, config);
+    case "snapshot":
+      return handleRouterSnapshot(ctx, config);
     default:
       if (sub.startsWith("rollout ")) {
         return handleRouterRollout(sub.slice("rollout ".length), ctx, config);
@@ -294,6 +351,6 @@ export async function handleRouterCommand(args: string | undefined, ctx: any, co
       if (sub.startsWith("shadow ")) {
         return handleRouterShadow(sub.slice("shadow ".length), ctx, config);
       }
-      return { text: `❌ Unknown subcommand: ${sub}\nUsage: /router [on|off|status|rollout|shadow|init-config|migrate-config]` };
+      return { text: `❌ Unknown subcommand: ${sub}\nUsage: /router [on|off|status|rollout|shadow|snapshot|init-config|migrate-config]` };
   }
 }
