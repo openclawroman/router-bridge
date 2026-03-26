@@ -1,5 +1,6 @@
 {
   "id": "router-bridge",
+  "version": "0.1.0",
   "name": "Router Bridge",
   "description": "Delegates coding tasks to openclaw-router via configurable execution backends.",
   "configSchema": {
@@ -64,6 +65,14 @@
     "healthCacheTtlMs": {
       "label": "Health Check Cache TTL (ms)",
       "help": "How long (in milliseconds) to cache router health check results."
+    },
+    "targetHarnessId": {
+      "label": "Target Harness ID",
+      "help": "Harness identifier for the ACP router adapter."
+    }
+  }
+}
+lth check results."
     }
   }
 }

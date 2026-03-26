@@ -120,6 +120,7 @@ describe("RouterExecutionAdapter interface", () => {
         routerConfigPath: "/tmp/test.yaml",
         fallbackToNativeOnError: true,
         healthCacheTtlMs: 30000,
+        targetHarnessId: "harness-1",
       } as any);
       expect(adapter.supportsPersistentSession()).toBe(true);
     });

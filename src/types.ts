@@ -26,6 +26,7 @@ export interface PluginConfig {
   routerConfigPath: string;
   fallbackToNativeOnError: boolean;
   healthCacheTtlMs: number;
+  targetHarnessId: string;
 }
 
 export const DEFAULT_CONFIG: PluginConfig = {
@@ -35,4 +36,5 @@ export const DEFAULT_CONFIG: PluginConfig = {
   routerConfigPath: "/tmp/openclaw-router/config/router.yaml",
   fallbackToNativeOnError: true,
   healthCacheTtlMs: 30000,
+  targetHarnessId: "default",
 };
