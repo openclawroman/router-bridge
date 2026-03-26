@@ -82,7 +82,7 @@ describe("handleRouterCommand dispatch", () => {
   it('"bogus" returns error message', async () => {
     const result = await handleRouterCommand("bogus", ctx);
     expect(result.text).toContain("Unknown subcommand: bogus");
-    expect(result.text).toContain("/router [on|off|status]");
+    expect(result.text).toContain("/router [on|off|status|rollout|shadow|init-config|migrate-config]");
   });
 });
 

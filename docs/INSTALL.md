@@ -1,5 +1,20 @@
 # Installation Layout
 
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openclawroman/router-bridge/main/scripts/install_router_stack.sh | bash
+```
+
+Or clone and run locally:
+
+```bash
+git clone https://github.com/openclawroman/router-bridge.git
+cd router-bridge && ./scripts/install_router_stack.sh
+```
+
+The script is idempotent — safe to run multiple times. It creates the directory structure, clones/updates openclaw-router, creates symlinks, generates an env template if missing, and runs a health check.
+
 ## Canonical Path Structure
 
 ```
