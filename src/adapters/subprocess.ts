@@ -4,6 +4,7 @@ import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvel
 
 /** Payload sent to the router CLI via stdin */
 interface RouterPayload {
+  protocol_version: number;
   task: string;
   task_id: string;
   task_meta: TaskMeta & {
@@ -325,6 +326,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     const context: TaskContext = envelope.context ?? {};
 
     return {
+      protocol_version: 1,
       task: envelope.task,
       task_id: envelope.taskId,
       task_meta: {
