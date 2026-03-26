@@ -380,6 +380,20 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     if (trimmed) {
       try {
         const parsed: RouterResponse = JSON.parse(trimmed);
+
+        // Protocol version validation
+        const pv = (parsed as any).protocol_version;
+        if (pv !== undefined && pv !== 1) {
+          return {
+            success: false,
+            output: `Protocol version mismatch: expected 1, got ${pv}`,
+            exitCode: 1,
+            durationMs: durationMs,
+            costEstimateUsd: 0,
+            tokensUsed: 0,
+          };
+        }
+
         if (typeof parsed.success === "boolean") {
           return {
             success: parsed.success,

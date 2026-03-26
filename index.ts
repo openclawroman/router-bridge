@@ -66,6 +66,25 @@ export default function register(api: any) {
 
       if (decision.delegate) {
         const adapter = createAdapter(config);
+
+        // Pre-flight health check
+        try {
+          const health = await adapter.health();
+          if (!health.healthy) {
+            if (config.fallbackToNativeOnError) {
+              ctx.routerFallback = true;
+              ctx.routerError = `Router unhealthy: ${health.output}`;
+              return;
+            }
+          }
+        } catch (err: any) {
+          if (config.fallbackToNativeOnError) {
+            ctx.routerFallback = true;
+            ctx.routerError = `Health check failed: ${err.message}`;
+            return;
+          }
+        }
+
         try {
           const result = await adapter.execute({
             task: taskText,

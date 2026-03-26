@@ -72,6 +72,30 @@ The bridge classifies router failures into:
 
 All categories trigger native fallback when `fallbackToNativeOnError: true`.
 
+## Error Response Format
+
+When the router or wrapper encounters a fatal error, it returns:
+
+```json
+{
+  "ok": false,
+  "protocol_version": 1,
+  "error_code": "ROUTER_UNHEALTHY",
+  "message": "Router health probe failed",
+  "fallback_recommended": true
+}
+```
+
+Error codes:
+- `ROUTER_NOT_FOUND` — Router entrypoint binary not found
+- `CONFIG_NOT_FOUND` — Router config file not found
+- `ROUTER_UNHEALTHY` — Health probe failed
+- `TIMEOUT` — Execution exceeded timeout_ms
+- `INTERNAL_ERROR` — Unexpected error in router
+- `PROTOCOL_VERSION_MISMATCH` — Unsupported protocol version
+
+All error responses include `fallback_recommended: true` when the bridge should fall back to native execution.
+
 ## Versioning
 
 Both request and response include `protocol_version: 1`. Breaking changes increment this field.

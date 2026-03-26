@@ -39,7 +39,7 @@ function defaultRouterRoot(): string {
 }
 
 function defaultRouterCommand(): string {
-  return `python3 ${defaultRouterRoot()}/bin/ai-code-runner`;
+  return path.join(defaultRouterRoot(), "bin", "ai-code-runner");
 }
 
 function defaultRouterConfigPath(): string {
