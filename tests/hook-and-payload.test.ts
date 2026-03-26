@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { ExecutionBackend, ScopeType, DEFAULT_CONFIG } from "../src/types";
 import { ExecutionBackendStore } from "../src/store";
 import { SubprocessRouterAdapter } from "../src/adapters";
@@ -8,17 +9,20 @@ import type { TaskEnvelope } from "../src/adapters/base";
 
 // ─── State persistence tests ───────────────────────────────────────────
 
-const STATE_FILE = path.join(
-  process.env.OPENCLAW_WORKSPACE || process.env.HOME || "/tmp",
-  ".openclaw/workspace/extensions/router-bridge/.router-state.json"
-);
+// Use an isolated temp dir so parallel test files don't stomp our state
+const TMP_DIR = path.join(os.tmpdir(), `router-bridge-hook-test-${process.pid}-${Date.now()}`);
+const STATE_FILE = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
 
+let originalEnv: string | undefined;
 beforeEach(() => {
+  originalEnv = process.env.OPENCLAW_WORKSPACE;
+  process.env.OPENCLAW_WORKSPACE = TMP_DIR;
   try {
     fs.unlinkSync(STATE_FILE);
   } catch {}
 });
 afterEach(() => {
+  process.env.OPENCLAW_WORKSPACE = originalEnv;
   try {
     fs.unlinkSync(STATE_FILE);
   } catch {}
