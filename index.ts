@@ -7,6 +7,8 @@ import { createAdapter } from "./src/adapters/factory";
 import { store } from "./src/commands";
 import { ExecutionBackend, ScopeType } from "./src/types";
 import { redactSecrets } from "./src/security";
+import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } from "./src/metrics";
+import { checkAutoDegrade } from "./src/safety";
 
 export default function register(api: any) {
   const getConfig = (): PluginConfig => ({
@@ -68,6 +70,17 @@ export default function register(api: any) {
       if (decision.delegate) {
         const adapter = createAdapter(config);
 
+        // Auto-degrade check
+        if (config.fallbackToNativeOnError) {
+          const safety = checkAutoDegrade(config);
+          if (safety.shouldDegrade) {
+            ctx.routerFallback = true;
+            ctx.routerError = `Auto-degraded: ${safety.reason}`;
+            recordFallback(`auto-degraded: ${safety.reason}`);
+            return;
+          }
+        }
+
         // Pre-flight health check
         try {
           const health = await adapter.health();
@@ -75,6 +88,8 @@ export default function register(api: any) {
             if (config.fallbackToNativeOnError) {
               ctx.routerFallback = true;
               ctx.routerError = `Router unhealthy: ${redactSecrets(health.output)}`;
+              recordHealthFailure();
+              recordFallback("health_failure");
               return;
             }
           }
@@ -82,6 +97,8 @@ export default function register(api: any) {
           if (config.fallbackToNativeOnError) {
             ctx.routerFallback = true;
             ctx.routerError = `Health check failed: ${redactSecrets(err.message)}`;
+            recordHealthFailure();
+            recordFallback("health_exception");
             return;
           }
         }
@@ -108,15 +125,21 @@ export default function register(api: any) {
               tokensUsed: result.tokensUsed,
               model: result.model,
             };
+            recordSuccess();
           } else if (config.fallbackToNativeOnError) {
             // Fall back to native — let the model handle it
             ctx.routerFallback = true;
             ctx.routerError = redactSecrets(result.output);
+            recordFallback(result.output || "execution_failed");
           }
         } catch (err: any) {
           if (config.fallbackToNativeOnError) {
             ctx.routerFallback = true;
             ctx.routerError = redactSecrets(err.message);
+            if (err.message?.includes("timed out")) {
+              recordTimeout();
+            }
+            recordFallback(err.message || "exception");
           }
         }
       }

@@ -5,6 +5,8 @@ import { ExecutionBackendStore } from "./store";
 import { createAdapter } from "./adapters/factory";
 import type { HealthResult } from "./adapters/base";
 import { runDoctor } from "./doctor";
+import { getMetrics, getMetricsSummary } from "./metrics";
+import { checkAutoDegrade } from "./safety";
 import { shouldRoute, describeRolloutLevel } from "./rollout";
 import * as fs from "fs";
 import * as path from "path";
@@ -197,6 +199,24 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
   }
 
   // ── Doctor checks ───────────────────────────────────────────────
+  // ── Metrics ─────────────────────────────────────────────────────
+  try {
+    const metrics = getMetrics();
+    lines.push("");
+    lines.push("**Metrics:**");
+    lines.push(getMetricsSummary());
+    if (metrics.lastSuccessAt) lines.push(`Last success: ${metrics.lastSuccessAt}`);
+    if (metrics.lastFallbackAt) lines.push(`Last fallback: ${metrics.lastFallbackAt} — ${metrics.lastFallbackReason}`);
+
+    const safety = checkAutoDegrade(config);
+    if (safety.shouldDegrade) {
+      lines.push("");
+      lines.push(`⚠️ AUTO-DEGRADED: ${safety.reason}`);
+    }
+  } catch {
+    // Metrics module not available
+  }
+
   const allPassed = allDoctorChecks.every(c => c.passed);
   lines.push("");
   lines.push(`Doctor: ${allPassed ? "✅ All checks passed" : "⚠️ Issues found"}`);
