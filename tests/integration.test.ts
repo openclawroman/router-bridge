@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import {
   handleRouterCommand,
   handleRouterOn,
@@ -77,9 +78,16 @@ describe("integration: /router commands", () => {
   });
 
   it("init-config creates config at expected path", () => {
-    const ctx = { threadId: "t-integ-6" };
-    const result = handleRouterInitConfig(ctx, DEFAULT_CONFIG);
-    expect(result.text).toMatch(/(✅|⚠️)/);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "integ-init-"));
+    const configPath = path.join(tmpDir, "router.config.json");
+    try {
+      const config = { ...DEFAULT_CONFIG, routerConfigPath: configPath };
+      const ctx = { threadId: "t-integ-6" };
+      const result = handleRouterInitConfig(ctx, config);
+      expect(result.text).toMatch(/(✅|⚠️)/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("status includes Runtime section", async () => {
