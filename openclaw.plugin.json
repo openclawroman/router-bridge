@@ -37,6 +37,17 @@
         "type": "number",
         "default": 30000,
         "description": "Cache TTL in milliseconds for router health checks."
+      },
+      "threadBindingMode": {
+        "type": "string",
+        "enum": ["per-thread", "per-session", "free"],
+        "default": "per-thread",
+        "description": "How ACP sessions bind to threads (Phase 2)"
+      },
+      "acpSessionKey": {
+        "type": ["string", "null"],
+        "default": null,
+        "description": "Pre-configured ACP session key (Phase 2)"
       }
     },
     "additionalProperties": false

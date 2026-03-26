@@ -27,6 +27,8 @@ export interface PluginConfig {
   fallbackToNativeOnError: boolean;
   healthCacheTtlMs: number;
   targetHarnessId: string;
+  threadBindingMode: "per-thread" | "per-session" | "free";
+  acpSessionKey: string | null;
 }
 
 export const DEFAULT_CONFIG: PluginConfig = {
@@ -37,4 +39,6 @@ export const DEFAULT_CONFIG: PluginConfig = {
   fallbackToNativeOnError: true,
   healthCacheTtlMs: 30000,
   targetHarnessId: "default",
+  threadBindingMode: "per-thread" as const,
+  acpSessionKey: null,
 };

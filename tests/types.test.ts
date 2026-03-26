@@ -41,6 +41,8 @@ describe("DEFAULT_CONFIG", () => {
     expect(DEFAULT_CONFIG).toHaveProperty("fallbackToNativeOnError");
     expect(DEFAULT_CONFIG).toHaveProperty("healthCacheTtlMs");
     expect(DEFAULT_CONFIG).toHaveProperty("targetHarnessId");
+    expect(DEFAULT_CONFIG).toHaveProperty("threadBindingMode");
+    expect(DEFAULT_CONFIG).toHaveProperty("acpSessionKey");
   });
 
   it("has correct types for each field", () => {
@@ -51,6 +53,8 @@ describe("DEFAULT_CONFIG", () => {
     expect(typeof DEFAULT_CONFIG.fallbackToNativeOnError).toBe("boolean");
     expect(typeof DEFAULT_CONFIG.healthCacheTtlMs).toBe("number");
     expect(typeof DEFAULT_CONFIG.targetHarnessId).toBe("string");
+    expect(typeof DEFAULT_CONFIG.threadBindingMode).toBe("string");
+    expect(DEFAULT_CONFIG.acpSessionKey).toBeNull();
   });
 
   it("has correct default values", () => {
@@ -58,6 +62,8 @@ describe("DEFAULT_CONFIG", () => {
     expect(DEFAULT_CONFIG.scopeMode).toBe(ScopeType.Thread);
     expect(DEFAULT_CONFIG.fallbackToNativeOnError).toBe(true);
     expect(DEFAULT_CONFIG.healthCacheTtlMs).toBe(30000);
+    expect(DEFAULT_CONFIG.threadBindingMode).toBe("per-thread");
+    expect(DEFAULT_CONFIG.acpSessionKey).toBeNull();
   });
 });
 
