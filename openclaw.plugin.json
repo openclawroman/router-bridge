@@ -8,13 +8,21 @@
     "properties": {
       "backendMode": {
         "type": "string",
-        "enum": ["native", "router-bridge", "router-acp"],
+        "enum": [
+          "native",
+          "router-bridge",
+          "router-acp"
+        ],
         "default": "native",
         "description": "Which execution backend to use for coding tasks."
       },
       "scopeMode": {
         "type": "string",
-        "enum": ["thread", "session", "global"],
+        "enum": [
+          "thread",
+          "session",
+          "global"
+        ],
         "default": "thread",
         "description": "Scope at which router overrides apply."
       },
@@ -40,12 +48,19 @@
       },
       "threadBindingMode": {
         "type": "string",
-        "enum": ["per-thread", "per-session", "free"],
+        "enum": [
+          "per-thread",
+          "per-session",
+          "free"
+        ],
         "default": "per-thread",
         "description": "How ACP sessions bind to threads (Phase 2)"
       },
       "acpSessionKey": {
-        "type": ["string", "null"],
+        "type": [
+          "string",
+          "null"
+        ],
         "default": null,
         "description": "Pre-configured ACP session key (Phase 2)"
       },
