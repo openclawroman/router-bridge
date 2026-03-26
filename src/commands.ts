@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import { ExecutionBackend, ScopeType, PluginConfig, DEFAULT_CONFIG } from "./types";
 import { ExecutionBackendStore } from "./store";
 
@@ -26,6 +27,48 @@ function resolveScope(ctx: any, config: PluginConfig): { scopeType: ScopeType; s
 }
 
 export { resolveScope, store };
+
+// ── Health check with TTL cache ─────────────────────────────────────────────
+interface HealthResult {
+  healthy: boolean;
+  output: string;
+  latencyMs: number;
+}
+
+const healthCache = new Map<string, { result: HealthResult; timestamp: number }>();
+
+function getHealthCacheKey(config: PluginConfig): string {
+  return config.routerCommand;
+}
+
+export function checkRouterHealth(config: PluginConfig): HealthResult {
+  const key = getHealthCacheKey(config);
+  const cached = healthCache.get(key);
+  if (cached && Date.now() - cached.timestamp < config.healthCacheTtlMs) {
+    return cached.result;
+  }
+
+  let result: HealthResult;
+  try {
+    const start = Date.now();
+    const output = execSync(`${config.routerCommand} --health`, {
+      timeout: 10000,
+      encoding: "utf-8",
+    }).trim();
+    const latencyMs = Date.now() - start;
+    result = { healthy: true, output, latencyMs };
+  } catch (err: any) {
+    const latencyMs = Date.now() - (Date.now()); // 0 for exec errors
+    result = {
+      healthy: false,
+      output: err.message || String(err),
+      latencyMs: 0,
+    };
+  }
+
+  healthCache.set(key, { result, timestamp: Date.now() });
+  return result;
+}
 
 export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
@@ -57,6 +100,25 @@ export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONF
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
 
+  // Health check
+  const health = checkRouterHealth(config);
+  const healthIcon = health.healthy ? "✅ healthy" : "❌ unavailable";
+  const healthLine = `Health: ${healthIcon} (${health.latencyMs}ms)`;
+  const healthOutput = `  Output: ${health.output}`;
+
+  // Backend status
+  const backendStatus = effective.executionBackend === ExecutionBackend.RouterBridge
+    ? (health.healthy ? "active" : "unavailable")
+    : "—";
+  const backendLine = effective.executionBackend === ExecutionBackend.RouterBridge
+    ? `Backend status: ${backendStatus}`
+    : null;
+
+  // Fallback policy
+  const fallbackPolicy = config.fallbackToNativeOnError
+    ? "native (auto-fallback on error)"
+    : "none (errors will propagate)";
+
   const lines = [
     "📊 **Router Bridge Status**",
     `Backend: \`${effective.executionBackend}\``,
@@ -64,12 +126,19 @@ export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONF
     `Thread: ${effective.threadId ?? "—"}`,
     `Session: ${effective.sessionId ?? "—"}`,
     "",
+    healthLine,
+    healthOutput,
+    "",
     "**Config:**",
     `Scope mode: ${config.scopeMode}`,
     `Router command: \`${config.routerCommand}\``,
     `Fallback on error: ${config.fallbackToNativeOnError ? "yes" : "no"}`,
     `Health cache TTL: ${config.healthCacheTtlMs}ms`,
+    "",
+    `Fallback policy: ${fallbackPolicy}`,
   ];
+
+  if (backendLine) lines.splice(6, 0, backendLine);
 
   if (effective.executionBackend === ExecutionBackend.RouterAcp) {
     lines.push(`ACP target: ${effective.targetHarnessId ?? "—"}`);
