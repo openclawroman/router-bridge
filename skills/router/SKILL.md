@@ -1,8 +1,6 @@
 # Router Bridge Skill
 
-Maps natural-language requests about router/backend control to the
-plugin's command handlers. This is a **thin semantic routing layer** —
-it delegates to the same functions used by `/router on|off|status`.
+Maps natural-language requests about router/backend control to `handleRouterOn()`, `handleRouterOff()`, and `handleRouterStatus()` in `src/commands.ts` — the same handlers that `/router on|off|status` call.
 
 ## Trigger Patterns
 
@@ -28,25 +26,8 @@ it delegates to the same functions used by `/router on|off|status`.
 - "show router status"
 - "what backend am I using"
 
-## Handler Integration
-
-The skill maps to `handleRouterOn()`, `handleRouterOff()`, and `handleRouterStatus()`
-from `src/commands.ts`. These are the SAME functions that `/router on|off|status` call.
-
-**Single source of truth:**
-- `/router on` → `handleRouterOn(ctx, config)`
-- Natural "use router here" → `handleRouterOn(ctx, config)`
-- Both paths produce identical state changes and output.
-
 ## Rules
 
-- Only act on explicit router/backend requests
 - Do NOT activate for general coding questions
-- Do NOT implement any state change logic — always delegate to handlers
-- The skill is auto-reply when matched (no model call needed)
-
-## Phase 2 (ACP)
-
-In Phase 2, the backend switches from subprocess to ACP sessions.
-The skill remains unchanged — same patterns, same handlers.
-Only the underlying adapter execution differs.
+- Always delegate to handlers — no inline state changes
+- Auto-reply when matched (no model call needed)
