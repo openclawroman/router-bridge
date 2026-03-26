@@ -3,7 +3,11 @@ import type { RouterExecutionAdapter, HealthResult, TaskEnvelope, ExecuteResult 
 export class AcpRouterAdapter implements RouterExecutionAdapter {
   private targetHarnessId: string;
 
-  constructor(opts: { targetHarnessId: string }) {
+  constructor(opts: { 
+    targetHarnessId: string;
+    threadBindingMode?: string;
+    acpSessionKey?: string | null;
+  }) {
     this.targetHarnessId = opts.targetHarnessId;
   }
 
