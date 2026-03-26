@@ -18,7 +18,7 @@ class NativeAdapter implements RouterExecutionAdapter {
 export function createAdapter(config: PluginConfig): RouterExecutionAdapter {
   switch (config.backendMode) {
     case "router-acp":
-      return new AcpRouterAdapter({ targetHarnessId: "default" });
+      return new AcpRouterAdapter({ targetHarnessId: config.targetHarnessId });
     case "router-bridge":
       return new SubprocessRouterAdapter({
         routerCommand: config.routerCommand,

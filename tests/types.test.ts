@@ -40,6 +40,7 @@ describe("DEFAULT_CONFIG", () => {
     expect(DEFAULT_CONFIG).toHaveProperty("routerConfigPath");
     expect(DEFAULT_CONFIG).toHaveProperty("fallbackToNativeOnError");
     expect(DEFAULT_CONFIG).toHaveProperty("healthCacheTtlMs");
+    expect(DEFAULT_CONFIG).toHaveProperty("targetHarnessId");
   });
 
   it("has correct types for each field", () => {
@@ -49,6 +50,7 @@ describe("DEFAULT_CONFIG", () => {
     expect(typeof DEFAULT_CONFIG.routerConfigPath).toBe("string");
     expect(typeof DEFAULT_CONFIG.fallbackToNativeOnError).toBe("boolean");
     expect(typeof DEFAULT_CONFIG.healthCacheTtlMs).toBe("number");
+    expect(typeof DEFAULT_CONFIG.targetHarnessId).toBe("string");
   });
 
   it("has correct default values", () => {

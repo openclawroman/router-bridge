@@ -81,13 +81,15 @@ describe("RouterExecutionAdapter interface", () => {
 
     it("execute() returns not implemented", async () => {
       const adapter = new AcpRouterAdapter({ targetHarnessId: "harness-1" });
-      const result = await adapter.execute({
+      const envelope: TaskEnvelope = {
         task: "test",
         taskId: "t1",
         scopeId: "s1",
-      });
+      };
+      const result = await adapter.execute(envelope);
       expect(result.success).toBe(false);
       expect(result.output).toContain("Phase 2");
+      expect(result.exitCode).toBe(1);
     });
 
     it("closeScope is a no-op", async () => {
@@ -120,6 +122,7 @@ describe("RouterExecutionAdapter interface", () => {
         routerConfigPath: "/tmp/test.yaml",
         fallbackToNativeOnError: true,
         healthCacheTtlMs: 30000,
+        targetHarnessId: "harness-1",
       } as any);
       expect(adapter.supportsPersistentSession()).toBe(true);
     });
@@ -149,6 +152,22 @@ describe("RouterExecutionAdapter interface", () => {
         fallbackToNativeOnError: true,
         healthCacheTtlMs: 30000,
       } as any)).toThrow("Unknown backendMode");
+    });
+
+    it("creates AcpRouterAdapter with targetHarnessId and health returns Phase 2", async () => {
+      const { createAdapter } = await import("../src/adapters/factory");
+      const adapter = createAdapter({
+        backendMode: "router-acp",
+        scopeMode: "thread",
+        routerCommand: "echo",
+        routerConfigPath: "/tmp/test.yaml",
+        fallbackToNativeOnError: true,
+        healthCacheTtlMs: 30000,
+        targetHarnessId: "my-harness-42",
+      } as any);
+      const health = await adapter.health();
+      expect(health.healthy).toBe(false);
+      expect(health.output).toContain("Phase 2");
     });
   });
 });
