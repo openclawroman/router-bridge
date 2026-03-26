@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RouterResponse",
+  "description": "Output payload from openclaw-router to router-bridge via stdout",
+  "type": "object",
+  "required": ["task_id", "success"],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "default": 1
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "tool": {
+      "type": "string",
+      "description": "Which executor was used (codex_cli, claude_code, etc.)"
+    },
+    "backend": {
+      "type": "string"
+    },
+    "model_profile": {
+      "type": "string"
+    },
+    "normalized_error": {
+      "type": ["string", "null"]
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "latency_ms": {
+      "type": "integer"
+    },
+    "cost_estimate_usd": {
+      "type": ["number", "null"]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "final_summary": {
+      "type": ["string", "null"]
+    }
+  }
+}
