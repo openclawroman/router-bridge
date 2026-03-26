@@ -3,7 +3,7 @@
   "title": "RouterResponse",
   "description": "Output payload from openclaw-router to router-bridge via stdout",
   "type": "object",
-  "required": ["task_id", "success"],
+  "required": ["task_id", "success", "protocol_version"],
   "properties": {
     "protocol_version": {
       "type": "integer",

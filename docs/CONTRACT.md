@@ -30,13 +30,16 @@ Key fields:
 
 A single JSON object conforming to `schemas/router_response.schema.json`.
 
-Key fields:
-- `success`: Whether execution succeeded
-- `tool`: Which executor was used
-- `final_summary`: Result summary
+**Bridge expects these fields (matching openclaw-router output):**
+- `success`: Whether execution succeeded (boolean)
+- `tool`: Which executor was used (codex_cli, claude_code, etc.)
+- `final_summary`: Result summary text
 - `latency_ms`: Execution time
 - `cost_estimate_usd`: Cost if available
 - `normalized_error`: Error category on failure
+- `protocol_version`: Protocol version (must be 1)
+
+**Note:** The router uses `success` (not `ok`), `tool` (not `executor`), and `final_summary` (not `result`). This is the canonical format.
 
 ## Exit Codes
 

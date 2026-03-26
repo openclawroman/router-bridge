@@ -3,7 +3,7 @@
   "title": "RouterRequest",
   "description": "Input payload from router-bridge to openclaw-router via stdin",
   "type": "object",
-  "required": ["task", "task_id", "task_meta", "prompt", "scope"],
+  "required": ["protocol_version", "task", "task_id", "task_meta", "prompt", "scope"],
   "properties": {
     "protocol_version": {
       "type": "integer",
