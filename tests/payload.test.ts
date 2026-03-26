@@ -171,3 +171,77 @@ describe("SubprocessRouterAdapter buildPayload defaults", () => {
     expect(typeof result.success).toBe("boolean");
   });
 });
+
+describe("SubprocessRouterAdapter buildPayload JSON structure", () => {
+  const CAT_STDIN = "/tmp/router-bridge/tests/cat_stdin.sh";
+
+  it("builds full payload with all fields matching input", async () => {
+    // cat_stdin.sh ignores args and just runs cat, echoing stdin back
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: CAT_STDIN,
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+
+    const envelope: TaskEnvelope = {
+      task: "Fix the login bug",
+      taskId: "task-42",
+      scopeId: "thread-abc",
+      threadId: "t-123",
+      sessionId: "s-456",
+      taskMeta: {
+        type: "coding",
+        priority: "high",
+      },
+      attachments: [
+        { name: "auth.ts", content: "export function login() { ... }" },
+      ],
+      context: {
+        gitBranch: "fix/login",
+      },
+    };
+
+    const result = await adapter.execute(envelope);
+
+    // sh -c 'cat' exits 0 and echoes the JSON payload back
+    // The output won't parse as RouterResponse (no "success" key), so normalizeResponse
+    // treats it as non-JSON exit-0 output
+    expect(result.success).toBe(true);
+
+    // Parse the raw output (which is the JSON payload string) to verify structure
+    const payload = JSON.parse(result.output);
+
+    expect(payload.task_id).toBe("task-42");
+    expect(payload.scope.scope_id).toBe("thread-abc");
+    expect(payload.scope.thread_id).toBe("t-123");
+    expect(payload.scope.session_id).toBe("s-456");
+    expect(payload.task_meta.type).toBe("coding");
+    expect(payload.attachments).toHaveLength(1);
+    expect(payload.context.gitBranch).toBe("fix/login");
+  });
+
+  it("builds minimal payload with correct defaults", async () => {
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: CAT_STDIN,
+      routerConfigPath: "/tmp/test.yaml",
+      healthCacheTtlMs: 0,
+    });
+
+    const result = await adapter.execute({
+      task: "do something simple",
+      taskId: "t-min-1",
+      scopeId: "s-min-1",
+    });
+
+    expect(result.success).toBe(true);
+
+    const payload = JSON.parse(result.output);
+
+    expect(payload.task_id).toBe("t-min-1");
+    expect(payload.scope.scope_id).toBe("s-min-1");
+    expect(payload.scope.thread_id).toBeNull();
+    expect(payload.scope.session_id).toBeNull();
+    expect(payload.task_meta.type).toBe("other");
+    expect(payload.attachments).toEqual([]);
+  });
+});
