@@ -2,12 +2,15 @@ import { ensureRuntimeDirectories, validateStateIntegrity, repairStateFile } fro
 import { handleRouterCommand, handleRouterIntent } from "./commands";
 import { matchRouterIntent } from "./skill";
 import type { PluginConfig } from "./types";
+import { checkVersionCompatibility, formatVersionInfo } from "./src/versions";
+import { validateConfig } from "./src/config-validate";
 
 export { ensureRuntimeDirectories, validateStateIntegrity, repairStateFile } from "./store";
 export { handleRouterCommand, handleRouterIntent, resolveScope, store } from "./commands";
 export { matchRouterIntent } from "./skill";
 export { createAdapter } from "./adapters/factory";
 export type { TaskEnvelope, ExecuteResult, HealthResult } from "./adapters/base";
+export { checkDisableOrReprobe, markRecovered, getRecoveryState, formatRecoveryState, resetRecoveryState } from "./recovery";
 
 /**
  * Build a TaskEnvelope with continuity metadata from execution context.
@@ -46,6 +49,21 @@ export function buildTaskEnvelope(opts: {
 export default function register(api: any) {
   // Ensure directories on startup
   ensureRuntimeDirectories();
+
+  // Version compatibility check
+  const versionInfo = checkVersionCompatibility();
+  if (!versionInfo.compatible) {
+    api.logger?.warn(`router-bridge: ${versionInfo.issues.join("; ")}`);
+  }
+
+  // Config validation
+  const configValidation = validateConfig(api.config || {} as any);
+  if (!configValidation.valid) {
+    api.logger?.error(`router-bridge config errors: ${configValidation.errors.join("; ")}`);
+  }
+  for (const w of configValidation.warnings) {
+    api.logger?.warn(`router-bridge config: ${w}`);
+  }
 
   // Validate state integrity
   const { valid, issues } = validateStateIntegrity();

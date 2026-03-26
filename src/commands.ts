@@ -7,7 +7,10 @@ import type { HealthResult } from "./adapters/base";
 import { runDoctor } from "./doctor";
 import { getMetrics, getMetricsSummary } from "./metrics";
 import { checkAutoDegrade } from "./safety";
+import { formatRecoveryState } from "./recovery";
 import { shouldRoute, describeRolloutLevel } from "./rollout";
+import { checkVersionCompatibility } from "./versions";
+import { validateConfig } from "./config-validate";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -149,6 +152,27 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
   lines.push(`Runtime dir: ${runtimeExists ? "✅ exists" : "❌ missing"}`);
   lines.push(`Provider secrets: ${providerStatus}`);
 
+  // ── Version info ────────────────────────────────────────────────
+  const versionInfo = checkVersionCompatibility();
+  lines.push("");
+  lines.push("**Version:**");
+  lines.push(`Plugin: v${versionInfo.pluginVersion}`);
+  lines.push(`Router: v${versionInfo.installedRouterVersion || "unknown"}`);
+  if (!versionInfo.compatible) {
+    for (const issue of versionInfo.issues) {
+      lines.push(`⚠️ ${issue}`);
+    }
+  }
+
+  // ── Config validation ───────────────────────────────────────────
+  const configValidation = validateConfig(config);
+  if (!configValidation.valid || configValidation.warnings.length > 0) {
+    lines.push("");
+    lines.push("**Config Validation:**");
+    for (const e of configValidation.errors) lines.push(`❌ ${e}`);
+    for (const w of configValidation.warnings) lines.push(`⚠️ ${w}`);
+  }
+
   // ── Metrics (graceful if module not available) ──────────────────
   try {
     const { getMetricsSummary, getMetrics } = require("./metrics");
@@ -178,6 +202,15 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
     }
   } catch {
     // Safety module not available
+  }
+
+  // ── Recovery ────────────────────────────────────────────────────
+  try {
+    lines.push("");
+    lines.push("**Recovery:**");
+    lines.push(formatRecoveryState());
+  } catch {
+    // Recovery module not available
   }
 
   // ── Security audit (graceful) ───────────────────────────────────
