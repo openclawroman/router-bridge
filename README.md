@@ -76,6 +76,24 @@ index.ts                  ← Plugin entry: registers command + skill + service
 └── openclaw.plugin.json  ← Manifest with configSchema
 ```
 
+## Scope Resolution
+
+The plugin uses scoped state with fallback precedence:
+
+1. **Thread** — checked first (if `threadId` is present)
+2. **Session** — checked second (if `sessionId` is present)
+3. **Global** — fallback when no thread/session scope is set
+
+The delegation policy uses `getEffective()` to resolve the active backend at runtime, ensuring that `/router on` in a specific thread only affects that thread, while `/router on --scope global` affects all sessions.
+
+## Limitations
+
+- **One-shot execution**: The router CLI is invoked per-task via subprocess. There is no persistent session or streaming — each call is a complete stdin JSON → stdout JSON round-trip.
+- **No cancellation**: Once spawned, a router task cannot be cancelled mid-flight.
+- **Scope-only control**: The plugin does not register as an OpenClaw model provider. It uses execution hooks and delegation, not `/model` switching.
+
+For persistent sessions with streaming and cancellation, see Phase 2 (ACP) in [docs/MIGRATION.md](docs/MIGRATION.md).
+
 ## Configuration
 
 ```json
