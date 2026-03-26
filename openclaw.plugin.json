@@ -48,6 +48,11 @@
         "type": ["string", "null"],
         "default": null,
         "description": "Pre-configured ACP session key (Phase 2)"
+      },
+      "targetHarnessId": {
+        "type": "string",
+        "default": "default",
+        "description": "Harness identifier for the ACP router adapter."
       }
     },
     "additionalProperties": false
@@ -80,10 +85,6 @@
     "targetHarnessId": {
       "label": "Target Harness ID",
       "help": "Harness identifier for the ACP router adapter."
-    }
-  }
-}
-lth check results."
     }
   }
 }
