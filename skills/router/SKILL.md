@@ -44,3 +44,9 @@ from `src/commands.ts`. These are the SAME functions that `/router on|off|status
 - Do NOT activate for general coding questions
 - Do NOT implement any state change logic — always delegate to handlers
 - The skill is auto-reply when matched (no model call needed)
+
+## Phase 2 (ACP)
+
+In Phase 2, the backend switches from subprocess to ACP sessions.
+The skill remains unchanged — same patterns, same handlers.
+Only the underlying adapter execution differs.
