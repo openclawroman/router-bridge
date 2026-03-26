@@ -3,10 +3,79 @@ import * as fs from "fs";
 import * as path from "path";
 
 function getStateFilePath(): string {
-  return path.join(
-    process.env.OPENCLAW_WORKSPACE || process.env.HOME || "/tmp",
-    ".openclaw/workspace/extensions/router-bridge/.router-state.json"
-  );
+  const routerRoot = process.env.OPENCLAW_ROUTER_ROOT
+    || path.join(process.env.HOME || "/root", ".openclaw", "router");
+  return path.join(routerRoot, "runtime", "bridge", "state.json");
+}
+
+export function ensureRuntimeDirectories(): void {
+  const routerRoot = process.env.OPENCLAW_ROUTER_ROOT
+    || path.join(process.env.HOME || "/root", ".openclaw", "router");
+  const bridgeDir = path.join(routerRoot, "runtime", "bridge");
+  const routerDir = path.join(routerRoot, "runtime", "router");
+  fs.mkdirSync(bridgeDir, { recursive: true });
+  fs.mkdirSync(routerDir, { recursive: true });
+}
+
+export function validateStateIntegrity(): { valid: boolean; issues: string[] } {
+  const issues: string[] = [];
+  const filePath = getStateFilePath();
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { valid: true, issues: ["No state file (fresh install)"] };
+    }
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    // Validate each state entry
+    for (const [key, state] of Object.entries(parsed)) {
+      if (!state || typeof state !== "object") {
+        issues.push(`Invalid state entry for key: ${key}`);
+        continue;
+      }
+      const s = state as any;
+      if (!s.executionBackend) issues.push(`Missing executionBackend in ${key}`);
+      if (!s.scopeType) issues.push(`Missing scopeType in ${key}`);
+      if (!s.scopeId) issues.push(`Missing scopeId in ${key}`);
+    }
+
+    return { valid: issues.length === 0, issues };
+  } catch (err: any) {
+    return { valid: false, issues: [`Corrupt state file: ${err.message}`] };
+  }
+}
+
+export function repairStateFile(): string {
+  const filePath = getStateFilePath();
+
+  if (!fs.existsSync(filePath)) {
+    return "No state file to repair";
+  }
+
+  const backup = filePath + `.backup.${Date.now()}`;
+  fs.copyFileSync(filePath, backup);
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const clean: Record<string, RouterState> = {};
+
+    for (const [key, state] of Object.entries(parsed)) {
+      const s = state as any;
+      if (s.executionBackend && s.scopeType && s.scopeId) {
+        clean[key] = s as RouterState;
+      }
+    }
+
+    saveAll(clean);
+    return `Repaired. Invalid entries removed. Backup at ${backup}`;
+  } catch {
+    // Full corruption — reset
+    saveAll({});
+    return `State file corrupted. Reset to empty. Backup at ${backup}`;
+  }
 }
 
 function loadAll(): Record<string, RouterState> {

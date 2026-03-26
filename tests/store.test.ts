@@ -8,18 +8,18 @@ import * as os from "os";
 describe("ExecutionBackendStore", () => {
   let store: ExecutionBackendStore;
   const TMP_DIR = path.join(os.tmpdir(), `router-bridge-test-${process.pid}-${Date.now()}`);
-  const originalEnv = process.env.OPENCLAW_WORKSPACE;
+  const originalEnv = process.env.OPENCLAW_ROUTER_ROOT;
 
   beforeEach(() => {
-    process.env.OPENCLAW_WORKSPACE = TMP_DIR;
+    process.env.OPENCLAW_ROUTER_ROOT = path.join(TMP_DIR, "router");
     store = new ExecutionBackendStore();
   });
 
   afterEach(() => {
     if (originalEnv) {
-      process.env.OPENCLAW_WORKSPACE = originalEnv;
+      process.env.OPENCLAW_ROUTER_ROOT = originalEnv;
     } else {
-      delete process.env.OPENCLAW_WORKSPACE;
+      delete process.env.OPENCLAW_ROUTER_ROOT;
     }
     if (fs.existsSync(TMP_DIR)) {
       fs.rmSync(TMP_DIR, { recursive: true, force: true });
@@ -136,7 +136,7 @@ describe("ExecutionBackendStore", () => {
 
   describe("corrupt file recovery", () => {
     it("recovers gracefully from invalid JSON", () => {
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
       fs.writeFileSync(statePath, "{{not valid json!!!");
 
@@ -146,7 +146,7 @@ describe("ExecutionBackendStore", () => {
     });
 
     it("recovers from empty file", () => {
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
       fs.writeFileSync(statePath, "");
 
@@ -155,7 +155,7 @@ describe("ExecutionBackendStore", () => {
     });
 
     it("recovers from whitespace-only file", () => {
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
       fs.writeFileSync(statePath, "   \n\t  ");
 
@@ -164,7 +164,7 @@ describe("ExecutionBackendStore", () => {
     });
 
     it("set() works after corrupt file recovery", () => {
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
       fs.writeFileSync(statePath, "CORRUPTED");
 
@@ -178,7 +178,7 @@ describe("ExecutionBackendStore", () => {
   describe("atomic writes", () => {
     it("state file is valid JSON after write", () => {
       store.set(ScopeType.Thread, "t-atomic", ExecutionBackend.RouterBridge);
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       const raw = fs.readFileSync(statePath, "utf-8");
       const parsed = JSON.parse(raw);
       expect(parsed["thread:t-atomic"]).toBeDefined();
@@ -187,7 +187,7 @@ describe("ExecutionBackendStore", () => {
 
     it("no .tmp files left after write", () => {
       store.set(ScopeType.Thread, "t-clean", ExecutionBackend.RouterBridge);
-      const dir = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge");
+      const dir = path.join(TMP_DIR, "router", "runtime", "bridge");
       const files = fs.readdirSync(dir);
       const tmpFiles = files.filter(f => f.includes(".tmp."));
       expect(tmpFiles).toHaveLength(0);
@@ -197,7 +197,7 @@ describe("ExecutionBackendStore", () => {
   describe("metadata preservation", () => {
     it("set() preserves threadId from existing state", () => {
       // First set with a store that has threadId (simulating commands.ts pattern)
-      const statePath = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
+      const statePath = path.join(TMP_DIR, "router", "runtime", "bridge", "state.json");
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
       fs.writeFileSync(statePath, JSON.stringify({
         "thread:t1": {
