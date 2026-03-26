@@ -96,7 +96,7 @@ describe("RouterPayload contract", () => {
     const payload = JSON.parse(result.output);
     expect(payload.task_id).toBe("task-42");
     expect(payload.task_meta.task_id).toBe("task-42");
-    expect(payload.task_meta.task_class).toBe("code_generation");
+    expect(payload.task_meta.task_class).toBe("implementation");
     expect(payload.task_meta.risk).toBe("medium");
     expect(payload.task_meta.modality).toBe("text");
     expect(payload.task_meta.requires_repo_write).toBe(true);
@@ -134,7 +134,7 @@ describe("RouterPayload contract", () => {
     });
     expect(result.success).toBe(true);
     const payload = JSON.parse(result.output);
-    expect(payload.task_meta.task_class).toBe("planning");
+    expect(payload.task_meta.task_class).toBe("planner");
   });
 
   it("maps unknown type to general task_class", async () => {
@@ -151,7 +151,7 @@ describe("RouterPayload contract", () => {
     });
     expect(result.success).toBe(true);
     const payload = JSON.parse(result.output);
-    expect(payload.task_meta.task_class).toBe("general");
+    expect(payload.task_meta.task_class).toBe("implementation");
     expect(payload.task_meta.requires_repo_write).toBe(false);
   });
 

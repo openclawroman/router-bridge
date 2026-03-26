@@ -350,13 +350,14 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         ...taskMeta,
         task_id: envelope.taskId, // router reads task_id from here
         task_class:
-          taskMeta.type === "coding"
-            ? "code_generation"
+          envelope.taskClass ||
+          (taskMeta.type === "coding"
+            ? "implementation"
             : taskMeta.type === "review"
               ? "code_review"
               : taskMeta.type === "planning"
-                ? "planning"
-                : "general",
+                ? "planner"
+                : "implementation"),
         risk: "medium",
         modality: "text",
         requires_repo_write: taskMeta.type === "coding",

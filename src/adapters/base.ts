@@ -47,6 +47,7 @@ export interface TaskEnvelope {
 
   // Rich payload
   taskMeta?: TaskMeta;
+  taskClass?: string; // Router TaskClass enum value
   prompt?: string;
   attachments?: Attachment[];
   context?: TaskContext;

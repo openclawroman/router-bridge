@@ -22,6 +22,7 @@ export function buildTaskEnvelope(opts: {
   threadId?: string | null;
   sessionId?: string | null;
   taskMeta?: Record<string, any>;
+  taskClass?: string;
   ctx?: any;
 }) {
   const ctx = opts.ctx || {};
@@ -32,6 +33,7 @@ export function buildTaskEnvelope(opts: {
     threadId: opts.threadId,
     sessionId: opts.sessionId,
     taskMeta: opts.taskMeta,
+    taskClass: opts.taskClass,
     prompt: opts.task,
     cwd: ctx.cwd || process.cwd(),
     recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
