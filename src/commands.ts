@@ -1,5 +1,7 @@
 import { ExecutionBackend, ScopeType, PluginConfig, DEFAULT_CONFIG } from "./types";
 import { ExecutionBackendStore } from "./store";
+import { createAdapter } from "./adapters/factory";
+import type { HealthResult } from "./adapters/base";
 
 const store = new ExecutionBackendStore();
 
@@ -53,9 +55,29 @@ export function handleRouterOff(ctx: any, config: PluginConfig = DEFAULT_CONFIG)
   };
 }
 
-export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
+
+  // Health check — delegates through adapter (single source of truth)
+  const adapter = createAdapter(config);
+  const health = await adapter.health();
+  const healthIcon = health.healthy ? "✅ healthy" : "❌ unavailable";
+  const healthLine = `Health: ${healthIcon} (${health.latencyMs}ms)`;
+  const healthOutput = `  Output: ${health.output}`;
+
+  // Backend status
+  const backendStatus = effective.executionBackend === ExecutionBackend.RouterBridge
+    ? (health.healthy ? "active" : "unavailable")
+    : "—";
+  const backendLine = effective.executionBackend === ExecutionBackend.RouterBridge
+    ? `Backend status: ${backendStatus}`
+    : null;
+
+  // Fallback policy
+  const fallbackPolicy = config.fallbackToNativeOnError
+    ? "native (auto-fallback on error)"
+    : "none (errors will propagate)";
 
   const lines = [
     "📊 **Router Bridge Status**",
@@ -64,12 +86,19 @@ export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONF
     `Thread: ${effective.threadId ?? "—"}`,
     `Session: ${effective.sessionId ?? "—"}`,
     "",
+    healthLine,
+    healthOutput,
+    "",
     "**Config:**",
     `Scope mode: ${config.scopeMode}`,
     `Router command: \`${config.routerCommand}\``,
     `Fallback on error: ${config.fallbackToNativeOnError ? "yes" : "no"}`,
     `Health cache TTL: ${config.healthCacheTtlMs}ms`,
+    "",
+    `Fallback policy: ${fallbackPolicy}`,
   ];
+
+  if (backendLine) lines.splice(6, 0, backendLine);
 
   if (effective.executionBackend === ExecutionBackend.RouterAcp) {
     lines.push(`ACP target: ${effective.targetHarnessId ?? "—"}`);
@@ -78,7 +107,7 @@ export function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONF
   return { text: lines.join("\n") };
 }
 
-export function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+export async function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const sub = (args || "").trim().toLowerCase();
   switch (sub) {
     case "on":
