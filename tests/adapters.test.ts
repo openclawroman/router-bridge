@@ -227,7 +227,7 @@ describe("RouterExecutionAdapter interface", () => {
         routerConfigPath: "/tmp/test.yaml",
         fallbackToNativeOnError: true,
         healthCacheTtlMs: 30000,
-      } as any)).toThrow("Unknown backendMode");
+      } as any)).toThrow(/Unknown backend/);
     });
 
     it("creates AcpRouterAdapter with targetHarnessId and health returns Phase 2", async () => {

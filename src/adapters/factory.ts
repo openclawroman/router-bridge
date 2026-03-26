@@ -1,3 +1,4 @@
+import * as path from "path";
 import type { PluginConfig } from "../types";
 import { SubprocessRouterAdapter } from "./subprocess";
 import { AcpRouterAdapter } from "./acp";
@@ -16,19 +17,33 @@ class NativeAdapter implements RouterExecutionAdapter {
   getLastHealthError(): string | null { return null; }
 }
 
-export function createAdapter(config: PluginConfig): RouterExecutionAdapter {
-  switch (config.backendMode) {
-    case "router-acp":
-      return new AcpRouterAdapter({ targetHarnessId: config.targetHarnessId });
-    case "router-bridge":
-      return new SubprocessRouterAdapter({
-        routerCommand: config.routerCommand,
-        routerConfigPath: config.routerConfigPath,
-        healthCacheTtlMs: config.healthCacheTtlMs,
-      });
-    case "native":
-      return new NativeAdapter();
-    default:
-      throw new Error(`Unknown backendMode: ${config.backendMode}`);
+export function createAdapter(config: PluginConfig, backendOverride?: string): RouterExecutionAdapter {
+  const backend = backendOverride || config.backendMode;
+
+  if (backend === "router-acp") {
+    return new AcpRouterAdapter({ targetHarnessId: config.targetHarnessId });
   }
+
+  if (backend === "router-bridge") {
+    // Use the configured router command, or fall back to canonical path
+    const routerCommand = config.routerCommand || path.join(
+      process.env.OPENCLAW_ROUTER_ROOT || path.join(process.env.HOME || "/root", ".openclaw", "router"),
+      "bin", "ai-code-runner"
+    );
+    const routerConfigPath = config.routerConfigPath || path.join(
+      process.env.OPENCLAW_ROUTER_ROOT || path.join(process.env.HOME || "/root", ".openclaw", "router"),
+      "config", "router.config.json"
+    );
+    return new SubprocessRouterAdapter({
+      routerCommand,
+      routerConfigPath,
+      healthCacheTtlMs: config.healthCacheTtlMs,
+    });
+  }
+
+  if (backend === "native") {
+    return new NativeAdapter();
+  }
+
+  throw new Error(`Unknown backend mode: ${backend}`);
 }

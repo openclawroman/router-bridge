@@ -68,8 +68,11 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
 
+  // Use effective backend for health check, not global config
+  const effectiveBackend = effective?.executionBackend || config.backendMode;
+
   // Health check — delegates through adapter (single source of truth)
-  const adapter = createAdapter(config);
+  const adapter = createAdapter(config, effectiveBackend);
   const health = await adapter.health();
   const healthIcon = health.healthy ? "✅ healthy" : "❌ unavailable";
   const healthLine = `Health: ${healthIcon} (${health.latencyMs}ms)`;

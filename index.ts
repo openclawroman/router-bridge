@@ -68,7 +68,10 @@ export default function register(api: any) {
       );
 
       if (decision.delegate) {
-        const adapter = createAdapter(config);
+        // Use effective scoped backend for adapter creation
+        const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
+        const effectiveBackend = effective?.executionBackend || config.backendMode;
+        const adapter = createAdapter(config, effectiveBackend);
 
         // Auto-degrade check
         if (config.fallbackToNativeOnError) {
