@@ -2,6 +2,7 @@ import { ExecutionBackend, ScopeType, PluginConfig, DEFAULT_CONFIG } from "./typ
 import { ExecutionBackendStore } from "./store";
 import { createAdapter } from "./adapters/factory";
 import type { HealthResult } from "./adapters/base";
+import { runDoctor } from "./doctor";
 
 const store = new ExecutionBackendStore();
 
@@ -105,6 +106,18 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
 
   if (effective.executionBackend === ExecutionBackend.RouterAcp) {
     lines.push(`ACP target: ${effective.targetHarnessId ?? "—"}`);
+  }
+
+  // Doctor checks
+  const doctorChecks = runDoctor(config);
+  const allPassed = doctorChecks.every(c => c.passed);
+  lines.push("");
+  lines.push(`Doctor: ${allPassed ? "✅ All checks passed" : "⚠️ Issues found"}`);
+  for (const check of doctorChecks) {
+    lines.push(`  ${check.passed ? "✅" : "❌"} ${check.name}: ${check.message}`);
+    if (!check.passed && check.details) {
+      lines.push(`     → ${check.details}`);
+    }
   }
 
   return { text: lines.join("\n") };

@@ -3,10 +3,7 @@
   "title": "RouterResponse",
   "description": "Output payload from openclaw-router to router-bridge via stdout",
   "type": "object",
-  "required": [
-    "task_id",
-    "success"
-  ],
+  "required": ["task_id", "success"],
   "properties": {
     "protocol_version": {
       "type": "integer",
@@ -29,10 +26,7 @@
       "type": "string"
     },
     "normalized_error": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "exit_code": {
       "type": "integer"
@@ -41,22 +35,14 @@
       "type": "integer"
     },
     "cost_estimate_usd": {
-      "type": [
-        "number",
-        "null"
-      ]
+      "type": ["number", "null"]
     },
     "artifacts": {
       "type": "array",
-      "items": {
-        "type": "string"
-      }
+      "items": { "type": "string" }
     },
     "final_summary": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     }
   }
 }
