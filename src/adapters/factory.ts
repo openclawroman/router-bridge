@@ -13,6 +13,7 @@ class NativeAdapter implements RouterExecutionAdapter {
   }
   supportsPersistentSession(): boolean { return false; }
   async closeScope(_scopeId: string): Promise<void> { /* no-op */ }
+  getLastHealthError(): string | null { return null; }
 }
 
 export function createAdapter(config: PluginConfig): RouterExecutionAdapter {

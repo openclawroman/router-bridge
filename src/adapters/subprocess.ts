@@ -51,29 +51,32 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       return cached.result;
     }
 
-    // Run health check
-    const start = Date.now();
-    try {
-      const output = execSync(`${this.routerCommand} --health`, {
-        timeout: 10000,
-        encoding: "utf-8",
-      });
-      const result: HealthResult = {
-        healthy: true,
-        output: output.trim(),
-        latencyMs: Date.now() - start,
-      };
-      this.healthCache.set("default", { result, timestamp: Date.now() });
-      return result;
-    } catch (err: any) {
-      const result: HealthResult = {
-        healthy: false,
-        output: err.message || String(err),
-        latencyMs: Date.now() - start,
-      };
-      this.healthCache.set("default", { result, timestamp: Date.now() });
-      return result;
-    }
+    const totalStart = Date.now();
+
+    // Run all checks
+    const binaryCheck = this.checkBinaryExists();
+    const configCheck = this.checkConfigValid();
+    const envCheck = this.checkEnvSufficient();
+    const subprocessCheck = await this.checkSubprocessHealth();
+
+    const checks = [binaryCheck, configCheck, envCheck, subprocessCheck];
+    const allPassed = checks.every(c => c.passed);
+    const failedChecks = checks.filter(c => !c.passed);
+
+    const diagnostic: HealthResult = {
+      healthy: allPassed,
+      output: allPassed
+        ? `All ${checks.length} checks passed`
+        : `${failedChecks.length}/${checks.length} checks failed: ${failedChecks.map(c => `${c.name}: ${c.message}`).join("; ")}`,
+      latencyMs: Date.now() - totalStart,
+    };
+
+    this.healthCache.set("default", { result: diagnostic, timestamp: Date.now() });
+    return diagnostic;
+  }
+
+  getLastHealthError(): string | null {
+    return this.lastError;
   }
 
   async execute(envelope: TaskEnvelope): Promise<ExecuteResult> {
@@ -139,6 +142,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
             err.code === "ENOENT"
               ? `Router CLI not found: ${this.routerCommand}`
               : `Router spawn error: ${err.message}`;
+          this.lastError = msg;
           done({
             success: false,
             output: msg,
@@ -173,6 +177,77 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────
+
+  private checkBinaryExists(): HealthCheckResult {
+    const start = Date.now();
+    try {
+      const binaryPath = this.routerCommand.split(" ")[0];
+      const exists = fs.existsSync(binaryPath);
+      return {
+        name: "binary_exists",
+        passed: exists,
+        message: exists ? `Binary found: ${binaryPath}` : `Binary not found: ${binaryPath}`,
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      return { name: "binary_exists", passed: false, message: err.message, latencyMs: Date.now() - start };
+    }
+  }
+
+  private checkConfigValid(): HealthCheckResult {
+    const start = Date.now();
+    if (!this.routerConfigPath) {
+      return { name: "config_valid", passed: true, message: "No config path set (using defaults)", latencyMs: Date.now() - start };
+    }
+    try {
+      const exists = fs.existsSync(this.routerConfigPath);
+      return {
+        name: "config_valid",
+        passed: exists,
+        message: exists ? `Config found: ${this.routerConfigPath}` : `Config not found: ${this.routerConfigPath}`,
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      return { name: "config_valid", passed: false, message: err.message, latencyMs: Date.now() - start };
+    }
+  }
+
+  private checkEnvSufficient(): HealthCheckResult {
+    const start = Date.now();
+    const pathEnv = process.env.PATH || "";
+    const binaryDir = this.routerCommand.split(" ")[0].split("/").slice(0, -1).join("/");
+    const onPath = !binaryDir || binaryDir.startsWith("/") ? true : pathEnv.includes(binaryDir);
+    return {
+      name: "env_sufficient",
+      passed: true,
+      message: onPath ? "Environment OK" : `Binary dir '${binaryDir}' may not be in PATH`,
+      latencyMs: Date.now() - start,
+    };
+  }
+
+  private async checkSubprocessHealth(): Promise<HealthCheckResult> {
+    const start = Date.now();
+    try {
+      const output = execSync(`${this.routerCommand} --health`, {
+        timeout: 10000,
+        encoding: "utf-8",
+      }).trim();
+      return {
+        name: "subprocess_health",
+        passed: true,
+        message: output || "Health check OK",
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      this.lastError = err.message || String(err);
+      return {
+        name: "subprocess_health",
+        passed: false,
+        message: this.lastError,
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
 
   /** Build the full RouterPayload from a TaskEnvelope */
   private buildPayload(envelope: TaskEnvelope, timeoutMs: number): RouterPayload {
