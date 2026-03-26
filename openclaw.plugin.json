@@ -20,12 +20,12 @@
       },
       "routerCommand": {
         "type": "string",
-        "default": "python3 /tmp/openclaw-router/cli.py",
+        "default": "python3 /tmp/openclaw-router/bin/ai-code-runner",
         "description": "Shell command to invoke openclaw-router CLI."
       },
       "routerConfigPath": {
         "type": "string",
-        "default": "/tmp/openclaw-router/config/router.yaml",
+        "default": "/tmp/openclaw-router/config/router.config.json",
         "description": "Path to openclaw-router configuration file."
       },
       "fallbackToNativeOnError": {
