@@ -1,4 +1,4 @@
-import { execSync, spawn } from "child_process";
+import { execFileSync, execSync, spawn } from "child_process";
 import * as fs from "fs";
 import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
 
@@ -6,7 +6,13 @@ import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvel
 interface RouterPayload {
   task: string;
   task_id: string;
-  task_meta: TaskMeta;
+  task_meta: TaskMeta & {
+    task_id: string;
+    task_class: string;
+    risk: string;
+    modality: string;
+    requires_repo_write: boolean;
+  };
   prompt: string;
   attachments: Attachment[];
   scope: {
@@ -14,7 +20,12 @@ interface RouterPayload {
     thread_id: string | null;
     session_id: string | null;
   };
-  context: TaskContext;
+  context: TaskContext & {
+    working_directory?: string;
+    git_branch?: string;
+    git_commit?: string;
+    recent_files?: string[];
+  };
   timeout_ms: number;
   max_tokens?: number;
 }
@@ -100,8 +111,11 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       };
 
       try {
+        const commandParts = this.routerCommand.trim().split(/\s+/);
+        const executable = commandParts[0];
+        const baseArgs = commandParts.slice(1);
         const args = ["--config", this.routerConfigPath, "route"];
-        const child = spawn(this.routerCommand, args, {
+        const child = spawn(executable, [...baseArgs, ...args], {
           stdio: ["pipe", "pipe", "pipe"],
         });
 
@@ -271,7 +285,10 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   private async checkSubprocessHealth(): Promise<HealthCheckResult> {
     const start = Date.now();
     try {
-      const output = execSync(`${this.routerCommand} --health`, {
+      const commandParts = this.routerCommand.trim().split(/\s+/);
+      const executable = commandParts[0];
+      const baseArgs = commandParts.slice(1);
+      const output = execFileSync(executable, [...baseArgs, "--health"], {
         timeout: 10000,
         encoding: "utf-8",
       }).trim();
@@ -294,7 +311,15 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
 
   /** Build the full RouterPayload from a TaskEnvelope */
   private buildPayload(envelope: TaskEnvelope, timeoutMs: number): RouterPayload {
-    const taskMeta: TaskMeta = envelope.taskMeta ?? { type: "other" };
+    const taskMeta: TaskMeta = {
+      type: envelope.taskMeta?.type ?? "other",
+      priority: envelope.taskMeta?.priority,
+      repoPath: envelope.taskMeta?.repoPath,
+      branch: envelope.taskMeta?.branch,
+      language: envelope.taskMeta?.language,
+    };
+
+    // Map task_type to router's expected schema
     const prompt = envelope.prompt ?? envelope.task;
     const attachments: Attachment[] = envelope.attachments ?? [];
     const context: TaskContext = envelope.context ?? {};
@@ -302,7 +327,21 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     return {
       task: envelope.task,
       task_id: envelope.taskId,
-      task_meta: taskMeta,
+      task_meta: {
+        ...taskMeta,
+        task_id: envelope.taskId, // router reads task_id from here
+        task_class:
+          taskMeta.type === "coding"
+            ? "code_generation"
+            : taskMeta.type === "review"
+              ? "code_review"
+              : taskMeta.type === "planning"
+                ? "planning"
+                : "general",
+        risk: "medium",
+        modality: "text",
+        requires_repo_write: taskMeta.type === "coding",
+      },
       prompt,
       attachments,
       scope: {
@@ -310,7 +349,13 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         thread_id: envelope.threadId ?? null,
         session_id: envelope.sessionId ?? null,
       },
-      context,
+      context: {
+        ...context,
+        working_directory: context.workingDirectory,
+        git_branch: context.gitBranch,
+        git_commit: context.gitCommit,
+        recent_files: context.recentFiles,
+      },
       timeout_ms: timeoutMs,
     };
   }

@@ -3,6 +3,9 @@ import { matchRouterIntent, handleRouterIntent } from "./src/skill";
 import { shouldDelegateToExecutionBackend, classifyTask } from "./src/policy";
 import type { PluginConfig } from "./src/types";
 import { DEFAULT_CONFIG } from "./src/types";
+import { createAdapter } from "./src/adapters/factory";
+import { store } from "./src/commands";
+import { ExecutionBackend, ScopeType } from "./src/types";
 
 export default function register(api: any) {
   const getConfig = (): PluginConfig => ({
@@ -10,7 +13,7 @@ export default function register(api: any) {
     ...(api.config?.plugins?.entries?.["router-bridge"]?.config ?? {}),
   });
 
-  // Auto-reply command
+  // ── Auto-reply command ────────────────────────────────────────────
   api.registerCommand({
     name: "router",
     description: "Control router execution backend (/router on|off|status)",
@@ -21,7 +24,7 @@ export default function register(api: any) {
     },
   });
 
-  // Skill handler — registered if api.registerSkill exists
+  // ── Skill handler ─────────────────────────────────────────────────
   if (api.registerSkill) {
     api.registerSkill({
       id: "router-bridge",
@@ -36,7 +39,68 @@ export default function register(api: any) {
     });
   }
 
-  // Delegation service
+  // ── Execution hook: intercept coding tasks ────────────────────────
+  if (api.on) {
+    api.on("before_prompt_build", async (ctx: any) => {
+      const config = getConfig();
+      if (config.backendMode !== "router-bridge") return;
+
+      const taskText = ctx.userMessage || ctx.prompt || "";
+      const classification = classifyTask(taskText);
+      if (!classification.isCodingTask) return;
+
+      const scopeType = config.scopeMode;
+      const threadId = ctx.threadId || null;
+      const sessionId = ctx.sessionKey || null;
+      const scopeId = threadId || sessionId || "default";
+
+      const decision = await shouldDelegateToExecutionBackend(
+        taskText,
+        config,
+        scopeId,
+        scopeType,
+      );
+
+      if (decision.delegate) {
+        const adapter = createAdapter(config);
+        try {
+          const result = await adapter.execute({
+            task: taskText,
+            taskId: ctx.messageId || `task-${Date.now()}`,
+            scopeId,
+            threadId,
+            sessionId,
+            taskMeta: { type: classification.taskType },
+            prompt: taskText,
+          });
+
+          if (result.success) {
+            // Inject result into context so the model sees it
+            ctx.routerResult = result.output;
+            ctx.routerMetadata = {
+              backend: "router-bridge",
+              classification,
+              durationMs: result.durationMs,
+              costEstimateUsd: result.costEstimateUsd,
+              tokensUsed: result.tokensUsed,
+              model: result.model,
+            };
+          } else if (config.fallbackToNativeOnError) {
+            // Fall back to native — let the model handle it
+            ctx.routerFallback = true;
+            ctx.routerError = result.output;
+          }
+        } catch (err: any) {
+          if (config.fallbackToNativeOnError) {
+            ctx.routerFallback = true;
+            ctx.routerError = err.message;
+          }
+        }
+      }
+    });
+  }
+
+  // ── Delegation service ────────────────────────────────────────────
   api.registerService({
     id: "router-bridge",
     start: () => {

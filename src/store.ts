@@ -42,7 +42,7 @@ export class ExecutionBackendStore {
     return states[scopeKey(scopeType, scopeId)] || null;
   }
 
-  set(scopeType: ScopeType, scopeId: string, backend: ExecutionBackend): RouterState {
+  set(scopeType: ScopeType, scopeId: string, backend: ExecutionBackend, threadId?: string | null, sessionId?: string | null, targetHarnessId?: string | null): RouterState {
     const states = loadAll();
     const key = scopeKey(scopeType, scopeId);
     const existing = states[key];
@@ -50,9 +50,9 @@ export class ExecutionBackendStore {
       executionBackend: backend,
       scopeType,
       scopeId,
-      threadId: existing?.threadId ?? null,
-      sessionId: existing?.sessionId ?? null,
-      targetHarnessId: existing?.targetHarnessId ?? null,
+      threadId: threadId !== undefined ? threadId : (existing?.threadId ?? null),
+      sessionId: sessionId !== undefined ? sessionId : (existing?.sessionId ?? null),
+      targetHarnessId: targetHarnessId !== undefined ? targetHarnessId : (existing?.targetHarnessId ?? null),
     };
     states[key] = state;
     saveAll(states);

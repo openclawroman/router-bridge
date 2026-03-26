@@ -31,9 +31,7 @@ export { resolveScope, store };
 
 export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
-  const state = store.set(scopeType, scopeId, ExecutionBackend.RouterBridge);
-  state.threadId = threadId;
-  state.sessionId = sessionId;
+  store.set(scopeType, scopeId, ExecutionBackend.RouterBridge, threadId, sessionId);
   return {
     text: [
       "✅ Router backend enabled for this scope.",
