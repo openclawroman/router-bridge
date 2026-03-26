@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync, execFileSync } from "child_process";
 import type { PluginConfig } from "./types";
+import { auditSecurity } from "./security";
 
 export interface DoctorCheck {
   name: string;
@@ -30,6 +31,9 @@ export function runDoctor(config: PluginConfig): DoctorCheck[] {
 
   // 6. Health probe
   checks.push(checkHealthProbe(config));
+
+  // 7. Security audit
+  checks.push(checkSecurity());
 
   return checks;
 }
@@ -175,4 +179,16 @@ function checkHealthProbe(config: PluginConfig): DoctorCheck {
       details: "Check that openclaw-router is installed and configured",
     };
   }
+}
+
+function checkSecurity(): DoctorCheck {
+  const audit = auditSecurity();
+  return {
+    name: "security_audit",
+    passed: audit.passed,
+    message: audit.passed
+      ? "All security checks passed"
+      : `Found ${audit.issues.length} issue(s)`,
+    details: audit.passed ? undefined : audit.issues.join("; "),
+  };
 }

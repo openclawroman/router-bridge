@@ -51,6 +51,11 @@ export interface TaskEnvelope {
   attachments?: Attachment[];
   context?: TaskContext;
   metadata?: Record<string, unknown>;
+
+  // Continuity fields
+  cwd?: string | null;
+  recentContext?: string | null;
+  repoBranch?: string | null;
 }
 
 export interface ExecuteResult {
