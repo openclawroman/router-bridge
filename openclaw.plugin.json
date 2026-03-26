@@ -1,0 +1,69 @@
+{
+  "id": "router-bridge",
+  "name": "Router Bridge",
+  "description": "Delegates coding tasks to openclaw-router via configurable execution backends.",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "backendMode": {
+        "type": "string",
+        "enum": ["native", "router-bridge", "router-acp"],
+        "default": "native",
+        "description": "Which execution backend to use for coding tasks."
+      },
+      "scopeMode": {
+        "type": "string",
+        "enum": ["thread", "session", "global"],
+        "default": "thread",
+        "description": "Scope at which router overrides apply."
+      },
+      "routerCommand": {
+        "type": "string",
+        "default": "python3 /tmp/openclaw-router/cli.py",
+        "description": "Shell command to invoke openclaw-router CLI."
+      },
+      "routerConfigPath": {
+        "type": "string",
+        "default": "/tmp/openclaw-router/config/router.yaml",
+        "description": "Path to openclaw-router configuration file."
+      },
+      "fallbackToNativeOnError": {
+        "type": "boolean",
+        "default": true,
+        "description": "Fall back to native execution if router backend errors."
+      },
+      "healthCacheTtlMs": {
+        "type": "number",
+        "default": 30000,
+        "description": "Cache TTL in milliseconds for router health checks."
+      }
+    },
+    "additionalProperties": false
+  },
+  "uiHints": {
+    "backendMode": {
+      "label": "Execution Backend",
+      "help": "Choose how coding tasks are routed: native agent, router-bridge delegation, or router-acp."
+    },
+    "scopeMode": {
+      "label": "Override Scope",
+      "help": "Whether router overrides apply per-thread, per-session, or globally."
+    },
+    "routerCommand": {
+      "label": "Router CLI Command",
+      "help": "Command used to invoke the openclaw-router CLI."
+    },
+    "routerConfigPath": {
+      "label": "Router Config Path",
+      "help": "Filesystem path to the openclaw-router YAML config."
+    },
+    "fallbackToNativeOnError": {
+      "label": "Fallback on Error",
+      "help": "Automatically switch to native execution if the router backend fails."
+    },
+    "healthCacheTtlMs": {
+      "label": "Health Check Cache TTL (ms)",
+      "help": "How long (in milliseconds) to cache router health check results."
+    }
+  }
+}
