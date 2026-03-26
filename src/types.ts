@@ -1,3 +1,5 @@
+import * as path from "path";
+
 export enum ExecutionBackend {
   Native = "native",
   RouterBridge = "router-bridge",
@@ -31,11 +33,24 @@ export interface PluginConfig {
   acpSessionKey: string | null;
 }
 
+function defaultRouterRoot(): string {
+  const home = process.env.HOME || "/root";
+  return path.join(home, ".openclaw", "router");
+}
+
+function defaultRouterCommand(): string {
+  return `python3 ${defaultRouterRoot()}/bin/ai-code-runner`;
+}
+
+function defaultRouterConfigPath(): string {
+  return `${defaultRouterRoot()}/config/router.config.json`;
+}
+
 export const DEFAULT_CONFIG: PluginConfig = {
   backendMode: ExecutionBackend.Native,
   scopeMode: ScopeType.Thread,
-  routerCommand: "python3 /tmp/openclaw-router/bin/ai-code-runner",
-  routerConfigPath: "/tmp/openclaw-router/config/router.config.json",
+  routerCommand: defaultRouterCommand(),
+  routerConfigPath: defaultRouterConfigPath(),
   fallbackToNativeOnError: true,
   healthCacheTtlMs: 30000,
   targetHarnessId: "default",
