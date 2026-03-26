@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG } from "./src/types";
 import { createAdapter } from "./src/adapters/factory";
 import { store } from "./src/commands";
 import { ExecutionBackend, ScopeType } from "./src/types";
+import { redactSecrets } from "./src/security";
 
 export default function register(api: any) {
   const getConfig = (): PluginConfig => ({
@@ -73,14 +74,14 @@ export default function register(api: any) {
           if (!health.healthy) {
             if (config.fallbackToNativeOnError) {
               ctx.routerFallback = true;
-              ctx.routerError = `Router unhealthy: ${health.output}`;
+              ctx.routerError = `Router unhealthy: ${redactSecrets(health.output)}`;
               return;
             }
           }
         } catch (err: any) {
           if (config.fallbackToNativeOnError) {
             ctx.routerFallback = true;
-            ctx.routerError = `Health check failed: ${err.message}`;
+            ctx.routerError = `Health check failed: ${redactSecrets(err.message)}`;
             return;
           }
         }
@@ -110,12 +111,12 @@ export default function register(api: any) {
           } else if (config.fallbackToNativeOnError) {
             // Fall back to native — let the model handle it
             ctx.routerFallback = true;
-            ctx.routerError = result.output;
+            ctx.routerError = redactSecrets(result.output);
           }
         } catch (err: any) {
           if (config.fallbackToNativeOnError) {
             ctx.routerFallback = true;
-            ctx.routerError = err.message;
+            ctx.routerError = redactSecrets(err.message);
           }
         }
       }

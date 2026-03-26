@@ -1,6 +1,7 @@
 import { execFileSync, execSync, spawn } from "child_process";
 import * as fs from "fs";
 import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
+import { redactSecrets } from "../security";
 
 /** Payload sent to the router CLI via stdin */
 interface RouterPayload {
@@ -162,7 +163,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
           this.lastError = msg;
           done({
             success: false,
-            output: msg,
+            output: redactSecrets(msg),
             exitCode: 1,
             durationMs: Date.now() - start,
           });
@@ -177,7 +178,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         if (timeoutHandle) clearTimeout(timeoutHandle);
         done({
           success: false,
-          output: err.message || String(err),
+          output: redactSecrets(err.message || String(err)),
           exitCode: 1,
           durationMs: Date.now() - start,
         });
@@ -404,7 +405,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         if (typeof parsed.success === "boolean") {
           return {
             success: parsed.success,
-            output: parsed.output ?? parsed.error ?? "",
+            output: redactSecrets(parsed.output ?? parsed.error ?? ""),
             exitCode: parsed.success ? 0 : exitCode ?? 1,
             durationMs: parsed.duration_ms ?? durationMs,
             costEstimateUsd: parsed.cost_usd,
@@ -431,7 +432,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     if (exitCode !== 0) {
       return {
         success: false,
-        output: stderr.trim() || trimmed || `Router exited with code ${exitCode}`,
+        output: redactSecrets(stderr.trim() || trimmed || `Router exited with code ${exitCode}`),
         exitCode,
         durationMs,
       };
@@ -445,7 +446,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
           : trimmed;
       return {
         success: true,
-        output: truncated,
+        output: redactSecrets(truncated),
         exitCode: 0,
         durationMs,
       };
