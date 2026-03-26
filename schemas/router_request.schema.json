@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RouterRequest",
+  "description": "Input payload from router-bridge to openclaw-router via stdin",
+  "type": "object",
+  "required": [
+    "task",
+    "task_id",
+    "task_meta",
+    "prompt",
+    "scope"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "default": 1,
+      "description": "Protocol version for forward compatibility"
+    },
+    "task": {
+      "type": "string",
+      "description": "The task description text"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Unique task identifier (top-level copy)"
+    },
+    "task_meta": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "task_class"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "coding",
+            "review",
+            "planning",
+            "chat",
+            "other"
+          ]
+        },
+        "task_id": {
+          "type": "string",
+          "description": "Task identifier (router reads from here)"
+        },
+        "task_class": {
+          "type": "string",
+          "enum": [
+            "code_generation",
+            "code_review",
+            "planning",
+            "general"
+          ]
+        },
+        "risk": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "modality": {
+          "type": "string",
+          "enum": [
+            "text",
+            "multimodal"
+          ]
+        },
+        "requires_repo_write": {
+          "type": "boolean"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "repoPath": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        }
+      }
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The full prompt text for execution"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "scope_id": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "working_directory": {
+          "type": "string"
+        },
+        "git_branch": {
+          "type": "string"
+        },
+        "git_commit": {
+          "type": "string"
+        },
+        "recent_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "default": 60000
+    }
+  }
+}
