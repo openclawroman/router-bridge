@@ -112,6 +112,9 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         }, timeoutMs);
 
         // ── Write payload to stdin ────────────────────────────────────
+        child.stdin.on("error", () => {
+          // EPIPE — child already exited, will be handled by error/close events
+        });
         try {
           child.stdin.write(JSON.stringify(payload));
           child.stdin.end();

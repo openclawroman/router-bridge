@@ -10,6 +10,8 @@ import { ExecutionBackendStore } from "../src/store";
 const TMP_DIR = path.join(os.tmpdir(), `router-bridge-policy-test-${process.pid}-${Date.now()}`);
 const STATE_FILE = path.join(TMP_DIR, ".openclaw/workspace/extensions/router-bridge/.router-state.json");
 
+const ORIGINAL_ENV = process.env.OPENCLAW_WORKSPACE;
+
 beforeEach(() => {
   // Point the store at our isolated temp dir
   process.env.OPENCLAW_WORKSPACE = TMP_DIR;
@@ -17,6 +19,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Restore original env
+  if (ORIGINAL_ENV) {
+    process.env.OPENCLAW_WORKSPACE = ORIGINAL_ENV;
+  } else {
+    delete process.env.OPENCLAW_WORKSPACE;
+  }
   try { fs.unlinkSync(STATE_FILE); } catch {}
 });
 
@@ -68,6 +76,38 @@ describe("classifyTask", () => {
   it("returns signals explaining the classification", () => {
     const result = classifyTask("Fix the TypeScript bug in the auth module");
     expect(result.signals.length).toBeGreaterThan(0);
+  });
+
+  it("handles empty string gracefully", () => {
+    const result = classifyTask("");
+    expect(result.isCodingTask).toBe(false);
+    expect(result.signals).toContain("empty-input");
+  });
+
+  it("handles whitespace-only input", () => {
+    const result = classifyTask("   ");
+    expect(result.isCodingTask).toBe(false);
+  });
+
+  it("classifies taskMeta type 'chat' as non-coding", () => {
+    const result = classifyTask({
+      task: "something",
+      taskId: "t1",
+      scopeId: "s1",
+      taskMeta: { type: "chat" },
+    });
+    expect(result.isCodingTask).toBe(false);
+    expect(result.taskType).toBe("chat");
+  });
+
+  it("classifies taskMeta type 'other' as non-coding", () => {
+    const result = classifyTask({
+      task: "something",
+      taskId: "t1",
+      scopeId: "s1",
+      taskMeta: { type: "other" },
+    });
+    expect(result.isCodingTask).toBe(false);
   });
 });
 

@@ -29,6 +29,9 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   }
 
   const text = typeof task === "string" ? task : task.task;
+  if (!text || !text.trim()) {
+    return { isCodingTask: false, taskType: "chat", confidence: 0, signals: ["empty-input"] };
+  }
   const lower = text.toLowerCase();
   const signals: string[] = [];
 
