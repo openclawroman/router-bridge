@@ -39,3 +39,8 @@ export function extractRuntimeScope(
 
   return { scopeType, scopeId, threadId, sessionId };
 }
+
+/** Format a scope key like "thread:agent:main:main" for logging */
+export function formatScopeKey(scopeType: ScopeType, scopeId: string): string {
+  return `${scopeType}:${scopeId}`;
+}

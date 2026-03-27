@@ -7,6 +7,7 @@ import { checkAutoDegrade } from "./safety";
 import { redactSecrets } from "./security";
 import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } from "./metrics";
 import { markRecovered } from "./recovery";
+import { extractRuntimeScope } from "./scope";
 import type { PluginConfig } from "./types";
 import { checkVersionCompatibility, formatVersionInfo } from "./src/versions";
 import { validateConfig } from "./src/config-validate";
@@ -14,6 +15,7 @@ import { validateConfig } from "./src/config-validate";
 export { ensureRuntimeDirectories, validateStateIntegrity, repairStateFile } from "./store";
 export { handleRouterCommand, handleRouterIntent, resolveScope, store } from "./commands";
 export { matchRouterIntent } from "./skill";
+export { extractRuntimeScope, formatScopeKey } from "./scope";
 export { createAdapter } from "./adapters/factory";
 export type { TaskEnvelope, ExecuteResult, HealthResult } from "./adapters/base";
 export { checkDisableOrReprobe, markRecovered, getRecoveryState, formatRecoveryState, resetRecoveryState } from "./recovery";
@@ -90,16 +92,20 @@ export default function register(api: any) {
       // ── Resolve effective backend (check scoped store first) ──────
       const taskText = ctx.userMessage || ctx.prompt || "";
       const classification = classifyTask(taskText);
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=classify isCoding=${classification.isCodingTask} confidence=${classification.confidence}%`);
+      }
       if (!classification.isCodingTask) return;
 
-      const scopeType = config.scopeMode;
-      const threadId = ctx.threadId || null;
-      const sessionId = ctx.sessionKey || null;
-      const scopeId = threadId || sessionId || "default";
+      const { scopeType, scopeId, threadId, sessionId } = extractRuntimeScope(ctx, config);
 
       // Look up scoped backend from store; fall back to global config
       const effectiveState = store.getEffective(scopeType, scopeId, threadId ?? undefined, sessionId ?? undefined);
       const effectiveBackend = effectiveState?.executionBackend || config.backendMode;
+
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=scope scopeType=${scopeType} scopeId=${scopeId}`);
+      }
 
       // Early bail: if effective backend is "native", don't delegate
       if (effectiveBackend !== "router-bridge") return;
@@ -113,6 +119,10 @@ export default function register(api: any) {
         threadId,
         sessionId,
       );
+
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=decision delegate=${decision.delegate} backend=${decision.backend}`);
+      }
 
       if (decision.delegate) {
         // Auto-degrade check
@@ -164,6 +174,10 @@ export default function register(api: any) {
             repoBranch: ctx.gitBranch || null,
           });
 
+          if (config.traceRouting) {
+            console.log(`[router-bridge] step=execute success=${result.success} latency=${result.durationMs ?? "N/A"}ms`);
+          }
+
           if (result.success) {
             const TOOL_LABELS: Record<string, string> = {
               "codex_cli": "Codex CLI",
@@ -210,6 +224,9 @@ export default function register(api: any) {
             recordSuccess();
             markRecovered();
           } else if (config.fallbackToNativeOnError) {
+            if (config.traceRouting) {
+              console.log(`[router-bridge] step=fallback reason=${decision.reason}`);
+            }
             ctx.routerFallback = true;
             ctx.routerError = redactSecrets(result.output);
             recordFallback(result.output || "execution_failed");

@@ -46,6 +46,7 @@ export interface PluginConfig {
   acpSessionKey: string | null;
   rolloutLevel: RolloutLevel;
   shadowMode: ShadowMode;
+  traceRouting?: boolean;
 }
 
 function defaultRouterRoot(): string {
