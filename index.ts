@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG } from "./src/types";
 import { createAdapter } from "./src/adapters/factory";
 import { store } from "./src/commands";
 import { ExecutionBackend, ScopeType } from "./src/types";
+import { extractRuntimeScope } from "./src/scope";
 import { redactSecrets } from "./src/security";
 import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } from "./src/metrics";
 import { checkAutoDegrade } from "./src/safety";
@@ -53,10 +54,7 @@ export default function register(api: any) {
       if (!classification.isCodingTask) return;
 
       // Use hookCtx fields: sessionKey (thread identifier), sessionId
-      const scopeType = config.scopeMode;
-      const threadId = ctx.sessionKey || null;
-      const sessionId = ctx.sessionId || null;
-      const scopeId = threadId || sessionId || "default";
+      const { scopeType, scopeId, threadId, sessionId } = extractRuntimeScope(ctx, config);
 
       const decision = await shouldDelegateToExecutionBackend(
         taskText,

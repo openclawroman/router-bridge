@@ -1,6 +1,7 @@
 import { takeSnapshot, restoreSnapshot, formatSnapshot, Snapshot } from "./snapshot";
 import { checkSecrets, loadEnvFile, checkProviderAuth, hasAnyProviderAuth } from "./secrets";
 import { ExecutionBackend, ScopeType, RolloutLevel, ShadowMode, PluginConfig, DEFAULT_CONFIG } from "./types";
+import { extractRuntimeScope } from "./scope";
 import { ExecutionBackendStore } from "./store";
 import { createAdapter } from "./adapters/factory";
 import type { HealthResult } from "./adapters/base";
@@ -17,27 +18,8 @@ import * as path from "path";
 
 const store = new ExecutionBackendStore();
 
-function resolveScope(ctx: any, config: PluginConfig): { scopeType: ScopeType; scopeId: string; threadId: string | null; sessionId: string | null } {
-  // Thread-scoped by default (matches OpenClaw convention)
-  const scopeType = config.scopeMode === ScopeType.Global ? ScopeType.Global
-    : config.scopeMode === ScopeType.Session ? ScopeType.Session
-    : ScopeType.Thread;
-
-  // Use channel context for scope ID when available
-  const threadId = ctx.threadId || null;
-  const sessionId = ctx.sessionKey || null;
-
-  let scopeId: string;
-  if (scopeType === ScopeType.Thread) {
-    scopeId = threadId || sessionId || "default";
-  } else if (scopeType === ScopeType.Session) {
-    scopeId = sessionId || "default";
-  } else {
-    scopeId = "default";
-  }
-
-  return { scopeType, scopeId, threadId, sessionId };
-}
+// Delegate to the shared scope module
+const resolveScope = extractRuntimeScope;
 
 export { resolveScope, store };
 
