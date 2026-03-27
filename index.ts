@@ -46,6 +46,8 @@ export default function register(api: any) {
   // ── Execution hook: intercept coding tasks ────────────────────────
   if (api.on) {
     api.on("before_prompt_build", async (event: any, ctx: any) => {
+      api.logger?.info?.(`[router-bridge] before_prompt_build fired: prompt=${JSON.stringify(event?.prompt ?? "").slice(0, 80)}`);
+
       const config = getConfig();
 
       const taskText = event.prompt || ctx.userMessage || "";
