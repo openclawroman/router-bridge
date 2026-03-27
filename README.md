@@ -178,7 +178,32 @@ The communication is via **stdin JSON payload**:
 }
 ```
 
-The router returns a JSON response with `success`, `output`, `duration_ms`, `cost_usd`, `tokens_used`, etc.
+The router returns a JSON **ExecutorResult** via `stdout`:
+
+```json
+{
+  "success": true,
+  "task_id": "...",
+  "tool": "codex_cli",
+  "backend": "openai_native",
+  "model_profile": "codex_primary",
+  "exit_code": 0,
+  "latency_ms": 1234,
+  "cost_estimate_usd": 0.0023,
+  "final_summary": "Task completed"
+}
+```
+
+The bridge normalizes this via `normalizeResponse()` into a simpler shape:
+
+| Raw Field | Normalized Field |
+|-----------|-----------------|
+| `final_summary` | `output` (text) |
+| `model_profile` | `model` |
+| `cost_estimate_usd` | `cost` |
+| `latency_ms` | `duration` |
+
+> **Note:** The `RouteDecision` (routing rationale, executor chain, state) is **not** returned on stdout. It is logged to `runtime/routing.jsonl` in the openclaw-router repo for audit/traceability.
 
 ## Phase 2 (ACP)
 
