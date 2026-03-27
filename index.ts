@@ -53,8 +53,8 @@ export default function register(api: any) {
       if (!classification.isCodingTask) return;
 
       const scopeType = config.scopeMode;
-      const threadId = ctx.threadId || null;
-      const sessionId = ctx.sessionKey || null;
+      const threadId = ctx.sessionKey || null; // hookCtx uses sessionKey as threadId
+      const sessionId = ctx.sessionId || null; // hookCtx uses sessionId as sessionId
       const scopeId = threadId || sessionId || "default";
 
       // Resolve effective backend from scoped store first, fall back to global
