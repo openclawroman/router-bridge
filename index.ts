@@ -53,11 +53,14 @@ export default function register(api: any) {
       const classification = classifyTask(taskText);
       if (!classification.isCodingTask) return;
 
-      // Check config-level backend mode first — if router-bridge is enabled globally, always delegate
-      const configBackend = config.backendMode;
-      const effectiveBackend = configBackend === "router-bridge" ? "router-bridge" : "native";
+      // Check store first — /router on sets state in store, not in config
+      // For Telegram messages, hookCtx doesn't carry threadId, so we check global and default scopes
+      const globalState = store.get(ScopeType.Global, "default");
+      const threadDefaultState = store.get(ScopeType.Thread, "default");
+      const storeEnabled = globalState?.executionBackend === ExecutionBackend.RouterBridge ||
+                           threadDefaultState?.executionBackend === ExecutionBackend.RouterBridge;
 
-      if (effectiveBackend !== "router-bridge") return;
+      if (!storeEnabled) return;
 
       const decision = await shouldDelegateToExecutionBackend(
         taskText,
