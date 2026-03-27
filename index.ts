@@ -63,6 +63,8 @@ export default function register(api: any) {
 
       const scopeType = config.scopeMode;
       const scopeId = "default";
+      const threadId = null;
+      const sessionId = null;
       const decision = await shouldDelegateToExecutionBackend(
         taskText,
         config,
