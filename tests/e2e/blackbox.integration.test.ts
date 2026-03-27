@@ -454,14 +454,14 @@ describe("Black-box E2E: thread-scoped backend isolation", () => {
     expect(hooks).toBeDefined();
 
     // Thread-A context — should delegate
-    const ctxA = makeCtx({ threadId: "thread-A" });
+    const ctxA = makeCtx({ threadId: "thread-A", sessionKey: "thread-A" });
     const eventA = { prompt: ctxA.userMessage };
     const resultA = await hooks![0](eventA, ctxA);
     expect(resultA).toBeDefined();
     expect(resultA.prependContext).toContain("Router-bridge");
 
     // Thread-B context — should NOT delegate (different scope)
-    const ctxB = makeCtx({ threadId: "thread-B" });
+    const ctxB = makeCtx({ threadId: "thread-B", sessionKey: "thread-B" });
     const eventB = { prompt: ctxB.userMessage };
     const resultB = await hooks![0](eventB, ctxB);
     expect(resultB).toBeUndefined();
