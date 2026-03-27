@@ -1,5 +1,45 @@
 # Installation Layout
 
+## Prerequisites
+
+### Codex CLI (required for openai_native backend)
+
+```bash
+# Install
+npm install -g @openai/codex
+
+# Authenticate — opens browser for OpenAI OAuth
+codex login
+
+# Verify
+codex --version
+codex exec "say hello"
+```
+
+After `codex login`, auth is stored in `~/.codex/config` (or `~/.codex/auth.json`). The router detects this automatically.
+
+### Claude Code CLI (optional, for anthropic backend)
+
+```bash
+# Install
+npm install -g @anthropic-ai/claude-code
+
+# Authenticate
+claude login
+
+# Verify
+claude --version
+```
+
+Without Claude, the router falls through `claude_backup` state and uses OpenRouter as fallback.
+
+### API Keys (optional, for OpenRouter backend)
+
+Set in `~/.openclaw/router/env/router.env`:
+```
+OPENROUTER_API_KEY=sk-or-...
+```
+
 ## Quick Install
 
 ```bash
