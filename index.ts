@@ -62,6 +62,8 @@ export default function register(api: any) {
 
       if (!storeEnabled) return;
 
+      const scopeType = config.scopeMode;
+      const scopeId = "default";
       const decision = await shouldDelegateToExecutionBackend(
         taskText,
         config,
