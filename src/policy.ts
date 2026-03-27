@@ -9,6 +9,8 @@ export interface DelegationDecision {
   reason: string;
   backend: ExecutionBackend;
   healthStatus: "healthy" | "unavailable" | "not_checked";
+  resolvedScopeType: ScopeType;
+  resolvedScopeId: string;
 }
 
 export interface TaskClassification {
@@ -144,6 +146,8 @@ export async function shouldDelegateToExecutionBackend(
       reason: `Backend is ${backend}, not router-bridge`,
       backend,
       healthStatus: "not_checked",
+      resolvedScopeType: scopeType,
+      resolvedScopeId: scopeId,
     };
   }
 
@@ -156,6 +160,8 @@ export async function shouldDelegateToExecutionBackend(
       reason: `Task classified as ${classification.taskType} (confidence: ${(classification.confidence * 100).toFixed(0)}%, signals: ${classification.signals.join(", ")})`,
       backend,
       healthStatus: "not_checked",
+      resolvedScopeType: scopeType,
+      resolvedScopeId: scopeId,
     };
   }
 
@@ -179,6 +185,8 @@ export async function shouldDelegateToExecutionBackend(
       reason: `Router unhealthy: ${health.output}`,
       backend,
       healthStatus: "unavailable",
+      resolvedScopeType: scopeType,
+      resolvedScopeId: scopeId,
     };
   }
 
@@ -188,5 +196,7 @@ export async function shouldDelegateToExecutionBackend(
     reason: `Coding task (${classification.taskType}, confidence ${(classification.confidence * 100).toFixed(0)}%), backend is router-bridge, router is ${health.healthy ? "healthy" : "unhealthy but fallback enabled"}`,
     backend,
     healthStatus: health.healthy ? "healthy" : "unavailable",
+    resolvedScopeType: scopeType,
+    resolvedScopeId: scopeId,
   };
 }
