@@ -132,7 +132,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         const commandParts = this.routerCommand.trim().split(/\s+/);
         const executable = commandParts[0];
         const baseArgs = commandParts.slice(1);
-        const args = ["--config", this.routerConfigPath, "route"];
+        const args = ["--config", this.routerConfigPath];
         const env = {
           ...process.env,
           OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
@@ -315,7 +315,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         ...process.env,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
       };
-      const output = execFileSync(executable, ["--config", this.routerConfigPath, ...baseArgs, "--health"], {
+      const output = execFileSync(executable, [...baseArgs, "--config", this.routerConfigPath, "--health"], {
         timeout: 10000,
         encoding: "utf-8",
         env,

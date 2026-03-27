@@ -52,19 +52,12 @@ export default function register(api: any) {
       const classification = classifyTask(taskText);
       if (!classification.isCodingTask) return;
 
-      // Check store first — /router on sets state in store, not in config
-      const globalState = store.get(ScopeType.Global, "default");
-      const threadDefaultState = store.get(ScopeType.Thread, "default");
-      const storeEnabled = globalState?.executionBackend === ExecutionBackend.RouterBridge ||
-                           threadDefaultState?.executionBackend === ExecutionBackend.RouterBridge;
-      api.logger?.info?.(`[router-bridge] hook fired, store=${storeEnabled}, global=${globalState?.executionBackend}, threadDefault=${threadDefaultState?.executionBackend}`);
-
-      if (!storeEnabled) return;
-
+      // Use hookCtx fields: sessionKey (thread identifier), sessionId
       const scopeType = config.scopeMode;
-      const scopeId = "default";
-      const threadId = null;
-      const sessionId = null;
+      const threadId = ctx.sessionKey || null;
+      const sessionId = ctx.sessionId || null;
+      const scopeId = threadId || sessionId || "default";
+
       const decision = await shouldDelegateToExecutionBackend(
         taskText,
         config,
@@ -77,7 +70,7 @@ export default function register(api: any) {
       api.logger?.info?.(`[router-bridge] decision=${JSON.stringify(decision)}`);
 
       if (decision.delegate) {
-        const adapter = createAdapter(config, effectiveBackend);
+        const adapter = createAdapter(config, decision.backend);
 
         if (config.fallbackToNativeOnError) {
           const safety = checkAutoDegrade(config);
