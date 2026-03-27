@@ -123,7 +123,13 @@ export default function register(api: any) {
           });
 
           if (result.success) {
-            ctx.routerResult = result.output;
+            const parts = [];
+            if (result.model) parts.push(result.model);
+            if (result.costEstimateUsd && result.costEstimateUsd > 0) parts.push(`$${result.costEstimateUsd.toFixed(4)}`);
+            if (result.durationMs) parts.push(`${result.durationMs}ms`);
+
+            const footer = parts.length > 0 ? `\n\n🔧 via ${parts.join(" · ")}` : "";
+            ctx.routerResult = result.output + footer;
             ctx.routerMetadata = {
               backend: effectiveBackend,
               classification,
