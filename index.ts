@@ -47,19 +47,15 @@ export default function register(api: any) {
   if (api.on) {
     api.on("before_prompt_build", async (event: any, ctx: any) => {
       const config = getConfig();
+      api.logger?.info?.(`[router-bridge] hook fired, backendMode=${config.backendMode}`);
 
       const taskText = event.prompt || ctx.userMessage || "";
       const classification = classifyTask(taskText);
       if (!classification.isCodingTask) return;
 
-      const scopeType = config.scopeMode;
-      const threadId = ctx.sessionKey || null; // hookCtx uses sessionKey as threadId
-      const sessionId = ctx.sessionId || null; // hookCtx uses sessionId as sessionId
-      const scopeId = threadId || sessionId || "default";
-
-      // Resolve effective backend from scoped store first, fall back to global
-      const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
-      const effectiveBackend = effective?.executionBackend || config.backendMode;
+      // Check config-level backend mode first — if router-bridge is enabled globally, always delegate
+      const configBackend = config.backendMode;
+      const effectiveBackend = configBackend === "router-bridge" ? "router-bridge" : "native";
 
       if (effectiveBackend !== "router-bridge") return;
 
@@ -126,6 +122,7 @@ export default function register(api: any) {
 
             // Inject router output as prependContext — agent presents it to user
             const routerOutput = result.output + footer;
+            api.logger?.info?.(`[router-bridge] delegation OK, prependContext len=${routerOutput.length}`);
             return {
               prependContext: `[Router-bridge executed this coding task via ${result.model || "codex"}]\n\n${routerOutput}`,
             };
