@@ -3,6 +3,7 @@ import { handleRouterCommand, handleRouterOn, handleRouterOff, handleRouterStatu
 import { handleRouterIntent } from "../src/skill";
 import { DEFAULT_CONFIG } from "../src/types";
 import { resetRecoveryState } from "../src/recovery";
+import { ensureDependencies } from "../src/dependencies";
 
 describe("smoke tests", () => {
   beforeEach(() => {
@@ -14,16 +15,20 @@ describe("smoke tests", () => {
 
     // Enable
     const on = handleRouterOn(ctx, DEFAULT_CONFIG);
-    expect(on.text).toContain("router-bridge");
+    if (ensureDependencies()) {
+      expect(on.text).toContain("router-bridge");
 
-    // Check status while on
-    const statusOn = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(statusOn.text).toContain("Router Bridge Status");
-    expect(statusOn.text).toContain("Metrics:");
-    expect(statusOn.text).toContain("Recovery:");
-    expect(statusOn.text).toContain("Version:");
+      // Check status while on
+      const statusOn = await handleRouterStatus(ctx, DEFAULT_CONFIG);
+      expect(statusOn.text).toContain("Router Bridge Status");
+      expect(statusOn.text).toContain("Metrics:");
+      expect(statusOn.text).toContain("Recovery:");
+      expect(statusOn.text).toContain("Version:");
+    } else {
+      expect(on.text).toContain("Missing dependencies");
+    }
 
-    // Disable
+    // Disable always works regardless of deps
     const off = handleRouterOff(ctx, DEFAULT_CONFIG);
     expect(off.text).toContain("native");
 

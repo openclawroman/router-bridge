@@ -10,6 +10,7 @@ import {
   handleRouterInitConfig,
 } from "../src/commands";
 import { DEFAULT_CONFIG } from "../src/types";
+import { ensureDependencies } from "../src/dependencies";
 
 // The store writes to this path at runtime
 const STATE_FILE = path.join(
@@ -26,11 +27,15 @@ afterEach(() => {
 });
 
 describe("integration: /router commands", () => {
-  it("on → status shows router active", async () => {
+  it("on → status shows router active (or warns about missing deps)", async () => {
     const ctx = { threadId: "t-integ-1", sessionKey: "s-integ-1" };
-    handleRouterOn(ctx, DEFAULT_CONFIG);
-    const status = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(status.text).toContain("router-bridge");
+    const onResult = handleRouterOn(ctx, DEFAULT_CONFIG);
+    if (ensureDependencies()) {
+      const status = await handleRouterStatus(ctx, DEFAULT_CONFIG);
+      expect(status.text).toContain("router-bridge");
+    } else {
+      expect(onResult.text).toContain("Missing dependencies");
+    }
   });
 
   it("off → status shows native", async () => {
@@ -58,23 +63,32 @@ describe("integration: /router commands", () => {
     expect(result.text).toContain("Unknown subcommand");
   });
 
-  it("on → off → on cycles correctly", async () => {
+  it("on → off → on cycles correctly (or warns about missing deps)", async () => {
     const ctx = { threadId: "t-integ-5" };
 
     // Turn on
-    handleRouterOn(ctx, DEFAULT_CONFIG);
-    const statusOn = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(statusOn.text).toContain("router-bridge");
+    const on1 = handleRouterOn(ctx, DEFAULT_CONFIG);
 
-    // Turn off
-    handleRouterOff(ctx, DEFAULT_CONFIG);
-    const statusOff = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(statusOff.text).toContain("native");
+    if (ensureDependencies()) {
+      const statusOn = await handleRouterStatus(ctx, DEFAULT_CONFIG);
+      expect(statusOn.text).toContain("router-bridge");
 
-    // Turn on again
-    handleRouterOn(ctx, DEFAULT_CONFIG);
-    const statusOn2 = await handleRouterStatus(ctx, DEFAULT_CONFIG);
-    expect(statusOn2.text).toContain("router-bridge");
+      // Turn off
+      handleRouterOff(ctx, DEFAULT_CONFIG);
+      const statusOff = await handleRouterStatus(ctx, DEFAULT_CONFIG);
+      expect(statusOff.text).toContain("native");
+
+      // Turn on again
+      handleRouterOn(ctx, DEFAULT_CONFIG);
+      const statusOn2 = await handleRouterStatus(ctx, DEFAULT_CONFIG);
+      expect(statusOn2.text).toContain("router-bridge");
+    } else {
+      expect(on1.text).toContain("Missing dependencies");
+
+      // Off still works
+      const off = handleRouterOff(ctx, DEFAULT_CONFIG);
+      expect(off.text).toContain("native");
+    }
   });
 
   it("init-config creates config at expected path", () => {

@@ -11,6 +11,7 @@ import { formatRecoveryState } from "./recovery";
 import { shouldRoute, describeRolloutLevel } from "./rollout";
 import { checkVersionCompatibility } from "./versions";
 import { validateConfig } from "./config-validate";
+import { checkAllDependencies, formatDependencyReport } from "./dependencies";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -41,6 +42,15 @@ function resolveScope(ctx: any, config: PluginConfig): { scopeType: ScopeType; s
 export { resolveScope, store };
 
 export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+  // Check dependencies before enabling
+  const deps = checkAllDependencies();
+  const missing = deps.filter(d => !d.installed);
+  if (missing.length > 0) {
+    return {
+      text: `⚠️ Missing dependencies:\n${formatDependencyReport(missing)}\n\nInstall them before enabling router mode.`,
+    };
+  }
+
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   store.set(scopeType, scopeId, ExecutionBackend.RouterBridge, threadId, sessionId);
   return {
@@ -380,6 +390,42 @@ export function handleRouterSnapshot(ctx: any, config: PluginConfig = DEFAULT_CO
   }
 }
 
+export function handleRouterDoctor(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
+  const allChecks = runDoctor(config);
+  const deps = checkAllDependencies();
+
+  const lines = [
+    "🩺 **Router Doctor**",
+    "",
+    "**Dependency Check:**",
+    formatDependencyReport(deps),
+    "",
+  ];
+
+  const allPassed = allChecks.every(c => c.passed);
+  const allDepsInstalled = deps.every(d => d.installed);
+
+  lines.push("**System Checks:**");
+  for (const check of allChecks) {
+    lines.push(`  ${check.passed ? "✅" : "❌"} ${check.name}: ${check.message}`);
+    if (!check.passed && check.details) {
+      lines.push(`     → ${check.details}`);
+    }
+  }
+
+  lines.push("");
+  if (allPassed && allDepsInstalled) {
+    lines.push("✅ All checks passed — router is ready.");
+  } else {
+    const issues: string[] = [];
+    if (!allDepsInstalled) issues.push(`${deps.filter(d => !d.installed).length} missing dependency(ies)`);
+    if (!allPassed) issues.push(`${allChecks.filter(c => !c.passed).length} system check(s) failed`);
+    lines.push(`⚠️ Issues found: ${issues.join(", ")}`);
+  }
+
+  return { text: lines.join("\n") };
+}
+
 export async function handleRouterCommand(args: string | undefined, ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const sub = (args || "").trim().toLowerCase();
   switch (sub) {
@@ -400,6 +446,8 @@ export async function handleRouterCommand(args: string | undefined, ctx: any, co
       return handleRouterStatus(ctx, config);
     case "snapshot":
       return handleRouterSnapshot(ctx, config);
+    case "doctor":
+      return handleRouterDoctor(ctx, config);
     default:
       if (sub.startsWith("rollout ")) {
         return handleRouterRollout(sub.slice("rollout ".length), ctx, config);
@@ -407,6 +455,6 @@ export async function handleRouterCommand(args: string | undefined, ctx: any, co
       if (sub.startsWith("shadow ")) {
         return handleRouterShadow(sub.slice("shadow ".length), ctx, config);
       }
-      return { text: `❌ Unknown subcommand: ${sub}\nUsage: /router [on|off|status|rollout|shadow|snapshot|init-config|migrate-config]` };
+      return { text: `❌ Unknown subcommand: ${sub}\nUsage: /router [on|off|status|rollout|shadow|snapshot|doctor|init-config|migrate-config]` };
   }
 }
