@@ -3,6 +3,7 @@ import * as path from "path";
 import { execSync, execFileSync } from "child_process";
 import type { PluginConfig } from "./types";
 import { auditSecurity } from "./security";
+import { checkProviderAuth, hasAnyProviderAuth, type ProviderAuthStatus } from "./secrets";
 
 export interface DoctorCheck {
   name: string;
@@ -121,35 +122,35 @@ function checkRuntimeDir(): DoctorCheck {
 }
 
 function checkSecrets(): DoctorCheck {
-  const required = ["OPENROUTER_API_KEY"];
-  const optional = ["ANTHROPIC_API_KEY"];
-  const missing: string[] = [];
+  const providers = checkProviderAuth();
+  const hasAny = hasAnyProviderAuth();
 
-  for (const key of required) {
-    if (!process.env[key]) {
-      missing.push(key);
-    }
-  }
+  const providerLines = providers.map(p => {
+    const icon = p.configured ? "✅" : "❌";
+    const methodNote = p.keyEnv ? ` (via ${p.keyEnv} or ${p.method})` : ` (${p.method})`;
+    return `${icon} ${p.provider}${methodNote}`;
+  });
 
-  for (const key of optional) {
-    if (process.env[key]) {
-      // present
-    }
-  }
-
-  if (missing.length === 0) {
+  if (hasAny) {
+    const configured = providers.filter(p => p.configured).map(p => p.provider);
+    const unconfigured = providers.filter(p => !p.configured).map(p => p.provider);
+    const details = providerLines.join("; ");
+    const msg = unconfigured.length > 0
+      ? `Configured: ${configured.join(", ")}. Missing: ${unconfigured.join(", ")}`
+      : `All providers configured: ${configured.join(", ")}`;
     return {
       name: "secrets_present",
       passed: true,
-      message: `Required secrets: all present. Optional: ${optional.filter(k => process.env[k]).join(", ") || "none"}`,
+      message: msg,
+      details,
     };
   }
 
   return {
     name: "secrets_present",
     passed: false,
-    message: `Missing required: ${missing.join(", ")}`,
-    details: "Set OPENROUTER_API_KEY in service environment",
+    message: "No provider auth configured",
+    details: providerLines.join("; ") + "\nSet at least one: OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or configure codex/claude CLI auth",
   };
 }
 

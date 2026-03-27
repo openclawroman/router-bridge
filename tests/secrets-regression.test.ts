@@ -74,12 +74,20 @@ describe("secrets regression", () => {
     expect(orKey!.present).toBe(true);
   });
 
-  it("validateSecrets throws when required keys missing", () => {
-    expect(() => validateSecrets()).toThrow(/Missing required secrets/);
+  it("validateSecrets throws when no provider auth configured", () => {
+    const savedHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+    expect(() => validateSecrets()).toThrow(/No provider auth configured/);
+    process.env.HOME = savedHome;
   });
 
-  it("validateSecrets passes when all required keys present", () => {
+  it("validateSecrets passes when OPENROUTER_API_KEY is set", () => {
     process.env.OPENROUTER_API_KEY = "sk-or-test";
+    expect(() => validateSecrets()).not.toThrow();
+  });
+
+  it("validateSecrets passes when ANTHROPIC_API_KEY is set", () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
     expect(() => validateSecrets()).not.toThrow();
   });
 });

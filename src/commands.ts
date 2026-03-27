@@ -1,5 +1,5 @@
 import { takeSnapshot, restoreSnapshot, formatSnapshot, Snapshot } from "./snapshot";
-import { checkSecrets, loadEnvFile } from "./secrets";
+import { checkSecrets, loadEnvFile, checkProviderAuth, hasAnyProviderAuth } from "./secrets";
 import { ExecutionBackend, ScopeType, RolloutLevel, ShadowMode, PluginConfig, DEFAULT_CONFIG } from "./types";
 import { ExecutionBackendStore } from "./store";
 import { createAdapter } from "./adapters/factory";
@@ -51,15 +51,39 @@ export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG):
     };
   }
 
+  // Check provider auth — warn but don't block if some providers are configured
+  const providers = checkProviderAuth();
+  const hasAuth = hasAnyProviderAuth();
+  if (!hasAuth) {
+    return {
+      text: "⚠️ No provider auth configured. Set at least one:\n" +
+        providers.map(p => {
+          const hint = p.keyEnv ? `  • ${p.provider}: set ${p.keyEnv} env var` : `  • ${p.provider}: configure CLI auth`;
+          return hint;
+        }).join("\n") +
+        "\n\nCannot enable router mode without provider auth.",
+    };
+  }
+
+  // Warn about unconfigured providers (non-blocking)
+  const unconfigured = providers.filter(p => !p.configured);
+  const configured = providers.filter(p => p.configured).map(p => p.provider);
+
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   store.set(scopeType, scopeId, ExecutionBackend.RouterBridge, threadId, sessionId);
-  return {
-    text: [
-      "✅ Router backend enabled for this scope.",
-      `Scope: ${scopeType}:${scopeId}`,
-      `Backend: ${ExecutionBackend.RouterBridge}`,
-    ].join("\n"),
-  };
+
+  const lines = [
+    "✅ Router backend enabled for this scope.",
+    `Scope: ${scopeType}:${scopeId}`,
+    `Backend: ${ExecutionBackend.RouterBridge}`,
+    `Auth: ${configured.join(", ")}`,
+  ];
+
+  if (unconfigured.length > 0) {
+    lines.push(`⚠️ No auth for: ${unconfigured.map(p => p.provider).join(", ")}`);
+  }
+
+  return { text: lines.join("\n") };
 }
 
 export function handleRouterOff(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {

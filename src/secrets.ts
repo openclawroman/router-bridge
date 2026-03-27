@@ -24,10 +24,8 @@ export interface ProviderAuthStatus {
  * Checks for ~/.codex/config, ~/.codex/auth.json, or OPENAI_API_KEY.
  */
 export function checkCodexAuth(): boolean {
-  // Environment variable auth
   if (process.env.OPENAI_API_KEY) return true;
 
-  // Config file auth
   const home = process.env.HOME || "/root";
   const codexConfigPaths = [
     path.join(home, ".codex", "config"),
@@ -54,10 +52,8 @@ export function checkCodexAuth(): boolean {
  * Checks for ANTHROPIC_API_KEY, ~/.config/claude/credentials, or ~/.claude/credentials.
  */
 export function checkClaudeAuth(): boolean {
-  // Environment variable auth
   if (process.env.ANTHROPIC_API_KEY) return true;
 
-  // Credential file auth
   const home = process.env.HOME || "/root";
   const claudeCredentialPaths = [
     path.join(home, ".config", "claude", "credentials"),
@@ -124,7 +120,6 @@ export function getUnconfiguredProviders(): ProviderAuthStatus[] {
 
 /**
  * Check if at least one provider has auth configured.
- * This replaces the old "OPENROUTER_API_KEY required" check.
  */
 export function hasAnyProviderAuth(): boolean {
   return checkProviderAuth().some(p => p.configured);
@@ -164,7 +159,6 @@ export function loadEnvFile(envFilePath: string): string[] {
  * Order: process env → env file (if path provided)
  */
 export function checkSecrets(envFilePath?: string): SecretStatus[] {
-  // Optionally load env file first
   if (envFilePath) {
     loadEnvFile(envFilePath);
   }
