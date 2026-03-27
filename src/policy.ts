@@ -46,24 +46,29 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   const signals: string[] = [];
 
   // Coding signals
+  // Unicode-aware: use (?:^|[^\p{L}\p{N}]) for word boundaries to handle Cyrillic
+  // For simple word lists, use (?:^|\s) before and look-ahead after
   const codingPatterns = [
-    { pattern: /\b(write|create|implement|build|code|program|develop|fix|patch)\b.*\b(code|function|class|module|component|api|endpoint|script)\b/i, label: "action+artifact" },
-    { pattern: /\b(refactor|optimize|debug|trace|diagnose)\b/i, label: "code-modification" },
-    { pattern: /\b(fix|bug|error|exception|crash|stacktrace|traceback)\b/i, label: "debugging" },
-    { pattern: /\b(test|unittest|coverage|spec|assert)\b/i, label: "testing" },
-    { pattern: /\b(commit|push|merge|branch|pr|pull request|rebase)\b/i, label: "git-operations" },
-    { pattern: /\b(deploy|build|ci|cd|pipeline|docker|container)\b/i, label: "devops" },
-    { pattern: /\b\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt)\b/i, label: "file-extension" },
-    { pattern: /\b(function|method|class|interface|type|struct|enum|import|export|require|async|await)\b/i, label: "code-keyword" },
-    { pattern: /\b(repo|repository|codebase|project|source|src)\b/i, label: "codebase-reference" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(write|create|implement|build|code|program|develop|fix|patch)(?:[^\p{L}\p{N}]|$).*(?:^|[^\p{L}\p{N}])(code|function|class|module|component|api|endpoint|script)(?:[^\p{L}\p{N}]|$)/i, label: "action+artifact" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(refactor|optimize|debug|trace|diagnose)(?:[^\p{L}\p{N}]|$)/i, label: "code-modification" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(fix|bug|error|exception|crash|stacktrace|traceback)(?:[^\p{L}\p{N}]|$)/i, label: "debugging" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(test|unittest|coverage|spec|assert)(?:[^\p{L}\p{N}]|$)/i, label: "testing" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(commit|push|merge|branch|pr|pull request|rebase)(?:[^\p{L}\p{N}]|$)/i, label: "git-operations" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(deploy|build|ci|cd|pipeline|docker|container)(?:[^\p{L}\p{N}]|$)/i, label: "devops" },
+    { pattern: /\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt)(?:[^\p{L}\p{N}]|$)/i, label: "file-extension" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(function|method|class|interface|type|struct|enum|import|export|require|async|await)(?:[^\p{L}\p{N}]|$)/i, label: "code-keyword" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(repo|repository|codebase|project|source|src)(?:[^\p{L}\p{N}]|$)/i, label: "codebase-reference" },
+    // Ukrainian coding action verbs - use (?:^|\s) boundary since \b fails with Cyrillic
+    { pattern: /(?:^|\s)(запрограмуй|розроби|створи|напиши|зроби|виконай|реалізуй|створити|програмуй|кодуй)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
+    { pattern: /(?:^|\s)(виправ|відлагодь|тестуй|скомпілюй|запусти)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
   ];
 
   // Non-coding signals
   const chatPatterns = [
-    { pattern: /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|maybe)\b/i, label: "greeting/ack" },
-    { pattern: /\b(what is|who is|when was|where is|how does|explain|define|tell me about)\b/i, label: "knowledge-question" },
-    { pattern: /\b(weather|time|date|news|translate|convert|calculate)\b/i, label: "utility-request" },
-    { pattern: /\b(opinion|think|feel|prefer|suggest|recommend)\b/i, label: "opinion-request" },
+    { pattern: /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|maybe|привіт|дякую|ок|так|ні|може)(?:\s|,|\.|!|$)/i, label: "greeting/ack" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(what is|who is|when was|where is|how does|explain|define|tell me about|що таке|хто такий|коли|де|як|поясни|визнач|розкажи)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(weather|time|date|news|translate|convert|calculate|погода|час|дата|новини|переклад|конвертуй|порахуй)(?:[^\p{L}\p{N}]|$)/i, label: "utility-request" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(opinion|think|feel|prefer|suggest|recommend|думка|вважаєш|порад|пропоную|рекомендуй)(?:[^\p{L}\p{N}]|$)/i, label: "opinion-request" },
   ];
 
   let codingScore = 0;
