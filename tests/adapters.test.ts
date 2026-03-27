@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import { SubprocessRouterAdapter, AcpRouterAdapter } from "../src/adapters";
 import type { TaskEnvelope } from "../src/adapters";
 
@@ -75,6 +78,30 @@ describe("Health diagnostics", () => {
     // The output shows failed checks, binary_exists should NOT be among them
     expect(result.output).toContain("subprocess_health");
     expect(result.output).not.toContain("binary_exists");
+  });
+
+  it("health check passes --config flag with configured config path", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "health-config-test-"));
+    const argsLog = path.join(tmpDir, "args.log");
+    const wrapper = path.join(tmpDir, "fake-router.sh");
+    fs.writeFileSync(wrapper, '#!/bin/sh\necho "$@" > "' + argsLog + '"\nexit 1\n');
+    fs.chmodSync(wrapper, "755");
+
+    const customConfig = "/custom/path/to/config.yaml";
+    const adapter = new SubprocessRouterAdapter({
+      routerCommand: wrapper,
+      routerConfigPath: customConfig,
+      healthCacheTtlMs: 0,
+    });
+
+    await adapter.health();
+
+    const loggedArgs = fs.readFileSync(argsLog, "utf-8").trim();
+    expect(loggedArgs).toContain("--config");
+    expect(loggedArgs).toContain(customConfig);
+    expect(loggedArgs).toContain("--health");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 
