@@ -74,6 +74,7 @@ export default function register(api: any) {
         threadId,
         sessionId,
       );
+      api.logger?.info?.(`[router-bridge] decision=${JSON.stringify(decision)}`);
 
       if (decision.delegate) {
         const adapter = createAdapter(config, effectiveBackend);
@@ -117,6 +118,7 @@ export default function register(api: any) {
             recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
             repoBranch: ctx.gitBranch || null,
           });
+          api.logger?.info?.(`[router-bridge] execute result=${JSON.stringify({success:result.success,error:result.error,exitCode:result.exitCode})}`);
 
           if (result.success) {
             const parts = [];
@@ -137,6 +139,7 @@ export default function register(api: any) {
             return; // fallback to native
           }
         } catch (err: any) {
+          api.logger?.error?.(`[router-bridge] execute error: ${err?.message || err}`);
           if (config.fallbackToNativeOnError) {
             if (err.message?.includes("timed out")) {
               recordTimeout();
