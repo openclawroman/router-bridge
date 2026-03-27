@@ -133,8 +133,13 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         const executable = commandParts[0];
         const baseArgs = commandParts.slice(1);
         const args = ["--config", this.routerConfigPath, "route"];
+        const env = {
+          ...process.env,
+          OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
+        };
         const child = spawn(executable, [...baseArgs, ...args], {
           stdio: ["pipe", "pipe", "pipe"],
+          env,
         });
 
         // ── Timeout handling ──────────────────────────────────────────
@@ -306,9 +311,14 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       const commandParts = this.routerCommand.trim().split(/\s+/);
       const executable = commandParts[0];
       const baseArgs = commandParts.slice(1);
+      const env = {
+        ...process.env,
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
+      };
       const output = execFileSync(executable, [...baseArgs, "--health"], {
         timeout: 10000,
         encoding: "utf-8",
+        env,
       }).trim();
       return {
         name: "subprocess_health",
