@@ -1,6 +1,6 @@
 {
   "id": "router-bridge",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "name": "Router Bridge",
   "description": "Delegates coding tasks to openclaw-router via configurable execution backends.",
   "configSchema": {
