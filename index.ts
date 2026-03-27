@@ -9,6 +9,7 @@ import { ExecutionBackend, ScopeType } from "./src/types";
 import { redactSecrets } from "./src/security";
 import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } from "./src/metrics";
 import { checkAutoDegrade } from "./src/safety";
+import { markRecovered } from "./src/recovery";
 
 export default function register(api: any) {
   const getConfig = (): PluginConfig => ({
