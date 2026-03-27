@@ -160,7 +160,7 @@ export async function shouldDelegateToExecutionBackend(
   } else {
     // Inline health check via adapter
     try {
-      const adapter = createAdapter(config);
+      const adapter = createAdapter(config, backend);
       health = await adapter.health();
     } catch {
       health = { healthy: false, output: "health check failed", latencyMs: 0 };

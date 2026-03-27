@@ -154,7 +154,8 @@ describe("E2E: happy path — delegate coding task through real router binary", 
     // 6. Assert: successful delegation via real router + fake codex
     expect(ctx.routerResult).toBeDefined();
     expect(ctx.routerResult).toContain("fake codex");
-    expect(ctx.routerResult).toContain("🔧 via");
+    expect(ctx.routerResult).toContain("🔧");
+    expect(ctx.routerResult).toMatch(/🔧 .+ · \d+ms/);
     expect(ctx.routerMetadata).toBeDefined();
     expect(ctx.routerMetadata.backend).toBe("router-bridge");
     expect(ctx.routerFallback).toBeUndefined();

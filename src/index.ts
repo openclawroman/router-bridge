@@ -165,7 +165,40 @@ export default function register(api: any) {
           });
 
           if (result.success) {
-            ctx.routerResult = result.output;
+            const TOOL_LABELS: Record<string, string> = {
+              "codex_cli": "Codex CLI",
+              "claude_code": "Claude Code",
+              "openrouter_api": "OpenRouter API",
+            };
+
+            const BACKEND_LABELS: Record<string, string> = {
+              "openai_native": "OpenAI",
+              "anthropic": "Anthropic",
+              "openrouter": "OpenRouter",
+            };
+
+            const MODEL_LABELS: Record<string, string> = {
+              "codex_primary": "o3-mini",
+              "codex_secondary": "o3",
+              "openrouter_minimax": "MiniMax",
+              "openrouter_kimi": "Kimi K2",
+              "claude_primary": "Claude 4 Sonnet",
+            };
+
+            const toolLabel = TOOL_LABELS[result.tool!] || result.tool;
+            const backendLabel = BACKEND_LABELS[result.backend!] || result.backend;
+            const modelLabel = MODEL_LABELS[result.model!] || result.model;
+
+            const parts = [toolLabel, backendLabel, modelLabel].filter(Boolean);
+            const meta: string[] = [];
+            if (result.durationMs) meta.push(`${result.durationMs}ms`);
+            if (result.costEstimateUsd && result.costEstimateUsd > 0) meta.push(`$${result.costEstimateUsd.toFixed(4)}`);
+
+            const footer = parts.length > 0
+              ? `\n\n🔧 ${parts.join(" · ")}${meta.length ? " · " + meta.join(" · ") : ""}`
+              : `\n\n🔧 router${meta.length ? " · " + meta.join(" · ") : ""}`;
+
+            ctx.routerResult = result.output + footer;
             ctx.routerMetadata = {
               backend: effectiveBackend,
               classification,

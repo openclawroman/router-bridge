@@ -459,6 +459,8 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
             costEstimateUsd: cost ?? 0,
             tokensUsed: parsed.tokens_used ?? 0,
             model,
+            tool: parsed.tool,
+            backend: parsed.backend,
           };
         }
       } catch {

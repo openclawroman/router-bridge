@@ -67,6 +67,8 @@ export interface ExecuteResult {
   costEstimateUsd?: number;
   tokensUsed?: number;
   model?: string;
+  tool?: string;
+  backend?: string;
 }
 
 export interface RouterExecutionAdapter {
