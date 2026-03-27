@@ -90,6 +90,9 @@ export default function register(api: any) {
       // ── Resolve effective backend (check scoped store first) ──────
       const taskText = ctx.userMessage || ctx.prompt || "";
       const classification = classifyTask(taskText);
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=classify isCoding=${classification.isCodingTask} confidence=${classification.confidence}%`);
+      }
       if (!classification.isCodingTask) return;
 
       const scopeType = config.scopeMode;
@@ -100,6 +103,10 @@ export default function register(api: any) {
       // Look up scoped backend from store; fall back to global config
       const effectiveState = store.getEffective(scopeType, scopeId, threadId ?? undefined, sessionId ?? undefined);
       const effectiveBackend = effectiveState?.executionBackend || config.backendMode;
+
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=scope scopeType=${scopeType} scopeId=${scopeId}`);
+      }
 
       // Early bail: if effective backend is "native", don't delegate
       if (effectiveBackend !== "router-bridge") return;
@@ -113,6 +120,10 @@ export default function register(api: any) {
         threadId,
         sessionId,
       );
+
+      if (config.traceRouting) {
+        console.log(`[router-bridge] step=decision delegate=${decision.delegate} backend=${decision.backend}`);
+      }
 
       if (decision.delegate) {
         // Auto-degrade check
@@ -164,6 +175,10 @@ export default function register(api: any) {
             repoBranch: ctx.gitBranch || null,
           });
 
+          if (config.traceRouting) {
+            console.log(`[router-bridge] step=execute success=${result.success} latency=${result.durationMs ?? "N/A"}ms`);
+          }
+
           if (result.success) {
             const TOOL_LABELS: Record<string, string> = {
               "codex_cli": "Codex CLI",
@@ -210,6 +225,9 @@ export default function register(api: any) {
             recordSuccess();
             markRecovered();
           } else if (config.fallbackToNativeOnError) {
+            if (config.traceRouting) {
+              console.log(`[router-bridge] step=fallback reason=${decision.reason}`);
+            }
             ctx.routerFallback = true;
             ctx.routerError = redactSecrets(result.output);
             recordFallback(result.output || "execution_failed");
