@@ -152,6 +152,9 @@ export class ExecutionBackendStore {
       const sessionState = this.get(ScopeType.Session, sessionId);
       if (sessionState) return sessionState;
     }
+    // Check the requested scope (e.g., thread:default)
+    const scopeState = this.get(scopeType, scopeId);
+    if (scopeState) return scopeState;
     const globalState = this.get(ScopeType.Global, "default");
     if (globalState) return globalState;
     return {

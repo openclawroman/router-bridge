@@ -1,5 +1,6 @@
 import { ExecutionBackend, ScopeType, PluginConfig } from "./types";
 import { ExecutionBackendStore } from "./store";
+import { store } from "./commands";
 import type { HealthResult, TaskEnvelope } from "./adapters/base";
 import { createAdapter } from "./adapters/factory";
 
@@ -131,7 +132,7 @@ export async function shouldDelegateToExecutionBackend(
   threadId?: string | null,
   sessionId?: string | null,
 ): Promise<DelegationDecision> {
-  const store = new ExecutionBackendStore();
+  // Use singleton store from commands.ts — shared state with /router commands
 
   // 1. Check backend in scope
   const state = store.getEffective(scopeType, scopeId, threadId ?? undefined, sessionId ?? undefined);
