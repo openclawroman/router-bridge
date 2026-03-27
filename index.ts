@@ -45,10 +45,10 @@ export default function register(api: any) {
 
   // ── Execution hook: intercept coding tasks ────────────────────────
   if (api.on) {
-    api.on("before_prompt_build", async (ctx: any) => {
+    api.on("before_prompt_build", async (event: any, ctx: any) => {
       const config = getConfig();
 
-      const taskText = ctx.userMessage || ctx.prompt || "";
+      const taskText = event.prompt || ctx.userMessage || "";
       const classification = classifyTask(taskText);
       if (!classification.isCodingTask) return;
 
@@ -79,10 +79,8 @@ export default function register(api: any) {
         if (config.fallbackToNativeOnError) {
           const safety = checkAutoDegrade(config);
           if (safety.shouldDegrade) {
-            ctx.routerFallback = true;
-            ctx.routerError = `Auto-degraded: ${safety.reason}`;
             recordFallback(`auto-degraded: ${safety.reason}`);
-            return;
+            return; // fallback to native — no prompt mutation
           }
         }
 
@@ -90,8 +88,6 @@ export default function register(api: any) {
           const health = await adapter.health();
           if (!health.healthy) {
             if (config.fallbackToNativeOnError) {
-              ctx.routerFallback = true;
-              ctx.routerError = `Router unhealthy: ${redactSecrets(health.output)}`;
               recordHealthFailure();
               recordFallback("health_failure");
               return;
@@ -99,8 +95,6 @@ export default function register(api: any) {
           }
         } catch (err: any) {
           if (config.fallbackToNativeOnError) {
-            ctx.routerFallback = true;
-            ctx.routerError = `Health check failed: ${redactSecrets(err.message)}`;
             recordHealthFailure();
             recordFallback("health_exception");
             return;
@@ -129,30 +123,23 @@ export default function register(api: any) {
             if (result.durationMs) parts.push(`${result.durationMs}ms`);
 
             const footer = parts.length > 0 ? `\n\n🔧 via ${parts.join(" · ")}` : "";
-            ctx.routerResult = result.output + footer;
-            ctx.routerMetadata = {
-              backend: effectiveBackend,
-              classification,
-              durationMs: result.durationMs,
-              costEstimateUsd: result.costEstimateUsd,
-              tokensUsed: result.tokensUsed,
-              model: result.model,
+
+            // Inject router output as prependContext — agent presents it to user
+            const routerOutput = result.output + footer;
+            return {
+              prependContext: `[Router-bridge executed this coding task via ${result.model || "codex"}]\n\n${routerOutput}`,
             };
-            recordSuccess();
-            markRecovered();
           } else if (config.fallbackToNativeOnError) {
-            ctx.routerFallback = true;
-            ctx.routerError = redactSecrets(result.output);
             recordFallback(result.output || "execution_failed");
+            return; // fallback to native
           }
         } catch (err: any) {
           if (config.fallbackToNativeOnError) {
-            ctx.routerFallback = true;
-            ctx.routerError = redactSecrets(err.message);
             if (err.message?.includes("timed out")) {
               recordTimeout();
             }
             recordFallback(err.message || "exception");
+            return; // fallback to native
           }
         }
       }
