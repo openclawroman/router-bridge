@@ -152,9 +152,14 @@ export class ExecutionBackendStore {
       const sessionState = this.get(ScopeType.Session, sessionId);
       if (sessionState) return sessionState;
     }
-    // Check the requested scope (e.g., thread:default)
+    // Check the requested scope (e.g., thread:agent:main:main)
     const scopeState = this.get(scopeType, scopeId);
     if (scopeState) return scopeState;
+    // Fallback to default within the same scope type (e.g., thread:default)
+    if (scopeId !== "default") {
+      const defaultScopeState = this.get(scopeType, "default");
+      if (defaultScopeState) return defaultScopeState;
+    }
     const globalState = this.get(ScopeType.Global, "default");
     if (globalState) return globalState;
     return {

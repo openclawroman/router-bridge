@@ -218,7 +218,7 @@ import { store as globalStore } from "../../src/commands";
 function clearAllStoreState(): void {
   globalStore.clear(ScopeType.Global, "default");
   // Best-effort clear of common test thread/session IDs
-  for (const id of ["thread-bb-1", "thread-A", "thread-B", "t1", "s1", "session-bb-1"]) {
+  for (const id of ["thread-bb-1", "thread-A", "thread-B", "t1", "s1", "session-bb-1", "scope-test-1", "sess-test-1"]) {
     try { globalStore.clear(ScopeType.Thread, id); } catch {}
     try { globalStore.clear(ScopeType.Session, id); } catch {}
   }
@@ -499,6 +499,112 @@ describe("Black-box E2E: result metadata footer", () => {
     expect(result).toBeDefined();
     expect(result.prependContext).toBeDefined();
     expect(result.prependContext).toContain("🔧");
+    expect(result.prependContext).toContain("Router-bridge");
+  }, 30_000);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Test 8 — Thread-scope delegation: /router on for thread → hook delegates
+// ───────────────────────────────────────────────────────────────────────
+describe("Black-box E2E: thread scope delegation", () => {
+  it("delegates when /router on is called with threadId and hook fires with matching sessionKey", async () => {
+    // 1. Create minimal plugin API with Thread scope mode
+    const api = createPluginApi({
+      routerCommand: REAL_ROUTER,
+      routerConfigPath: path.join(configDir, "router.config.json"),
+      healthCacheTtlMs: 0,
+      fallbackToNativeOnError: true,
+      scopeMode: ScopeType.Thread,
+    });
+
+    // 2. Register plugin
+    register(api);
+
+    // 3. /router on for a specific thread — resolveScope reads ctx.threadId for Thread scope
+    const onResult = await handleRouterCommand(
+      "on",
+      { threadId: "scope-test-1", sessionKey: null },
+      {
+        ...DEFAULT_CONFIG,
+        routerCommand: REAL_ROUTER,
+        routerConfigPath: path.join(configDir, "router.config.json"),
+        healthCacheTtlMs: 0,
+        scopeMode: ScopeType.Thread,
+      },
+    );
+    expect(onResult.text).toMatch(/(Router backend enabled|Missing dependencies)/);
+
+    // 4. Fire the before_prompt_build hook with ctx.sessionKey = "scope-test-1"
+    //    extractRuntimeScope reads ctx.sessionKey as threadId → matches stored scopeId
+    const ctx = makeCtx({ threadId: "scope-test-1", sessionKey: "scope-test-1" });
+    const event = { prompt: ctx.userMessage };
+
+    const hooks = api._hooks["before_prompt_build"];
+    expect(hooks).toBeDefined();
+    expect(hooks!.length).toBeGreaterThanOrEqual(1);
+    const result = await hooks![0](event, ctx);
+
+    // 5. Assert: hook returned prependContext (scope matched → delegation happened)
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("fake codex");
+    expect(result.prependContext).toContain("Router-bridge");
+  }, 30_000);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Test 9 — Session-scope delegation: /router on for session → hook delegates
+// ───────────────────────────────────────────────────────────────────────
+describe("Black-box E2E: session scope delegation", () => {
+  it("delegates when /router on is called with sessionId and hook fires with matching sessionId", async () => {
+    // 1. Create minimal plugin API with Session scope mode
+    const api = createPluginApi({
+      routerCommand: REAL_ROUTER,
+      routerConfigPath: path.join(configDir, "router.config.json"),
+      healthCacheTtlMs: 0,
+      fallbackToNativeOnError: true,
+      scopeMode: ScopeType.Session,
+    });
+
+    // 2. Register plugin
+    register(api);
+
+    // 3. /router on for a specific session
+    //    resolveScope reads ctx.sessionKey for Session scope → scopeId = sessionId = "sess-test-1"
+    const onResult = await handleRouterCommand(
+      "on",
+      { threadId: null, sessionKey: "sess-test-1" },
+      {
+        ...DEFAULT_CONFIG,
+        routerCommand: REAL_ROUTER,
+        routerConfigPath: path.join(configDir, "router.config.json"),
+        healthCacheTtlMs: 0,
+        scopeMode: ScopeType.Session,
+      },
+    );
+    expect(onResult.text).toMatch(/(Router backend enabled|Missing dependencies)/);
+
+    // 4. Fire the before_prompt_build hook with ctx.sessionId = "sess-test-1"
+    //    extractRuntimeScope reads ctx.sessionId as sessionId → matches stored scopeId
+    const ctx = {
+      userMessage: "Implement a TypeScript helper function",
+      prompt: "Implement a TypeScript helper function",
+      threadId: null,
+      sessionKey: null,
+      sessionId: "sess-test-1",
+      messageId: "msg-sess-1",
+    };
+    const event = { prompt: ctx.userMessage };
+
+    const hooks = api._hooks["before_prompt_build"];
+    expect(hooks).toBeDefined();
+    expect(hooks!.length).toBeGreaterThanOrEqual(1);
+    const result = await hooks![0](event, ctx);
+
+    // 5. Assert: hook returned prependContext (scope matched → delegation happened)
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("fake codex");
     expect(result.prependContext).toContain("Router-bridge");
   }, 30_000);
 });
