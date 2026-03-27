@@ -35,8 +35,8 @@ export interface FakeOpenClawApi {
   /** Simulates api.registerService */
   registerService: (descriptor: CapturedService) => void;
 
-  /** Simulates api.on */
-  on: (event: string, handler: (ctx: any) => Promise<void>) => void;
+  /** Simulates api.on — handler receives (event, ctx) and returns result */
+  on: (event: string, handler: (event: any, ctx: any) => Promise<any>) => void;
 
   /** Simulates api.config — the real API exposes this as a property */
   config: Record<string, any>;
@@ -53,7 +53,7 @@ export interface FakeOpenClawApi {
     commandHandlers: Record<string, CapturedCommand>;
     skillHandlers: Record<string, CapturedSkill>;
     serviceHandlers: Record<string, CapturedService>;
-    eventHandlers: Record<string, Array<(ctx: any) => Promise<void>>>;
+    eventHandlers: Record<string, Array<(event: any, ctx: any) => Promise<any>>>;
   };
 }
 
@@ -96,7 +96,7 @@ export function createFakeOpenClawApi(
       handlers.serviceHandlers[descriptor.id] = descriptor;
     },
 
-    on(event: string, handler: (ctx: any) => Promise<void>) {
+    on(event: string, handler: (event: any, ctx: any) => Promise<any>) {
       if (!handlers.eventHandlers[event]) {
         handlers.eventHandlers[event] = [];
       }

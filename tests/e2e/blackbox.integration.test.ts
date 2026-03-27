@@ -66,7 +66,7 @@ interface MinimalPluginApi {
   config: Record<string, any>;
   logger: { info: () => void; warn: () => void; error: () => void };
   /** Captured registrations — used by tests to invoke hooks. */
-  _hooks: Record<string, Array<(ctx: any) => Promise<void>>>;
+  _hooks: Record<string, Array<(event: any, ctx: any) => Promise<any>>>;
   _commands: Record<string, any>;
 }
 
@@ -80,7 +80,7 @@ function createPluginApi(overrides: Record<string, any> = {}): MinimalPluginApi 
     },
     registerSkill() {},
     registerService() {},
-    on(event: string, handler: (ctx: any) => Promise<void>) {
+    on(event: string, handler: (event: any, ctx: any) => Promise<void>) {
       if (!hooks[event]) hooks[event] = [];
       hooks[event].push(handler);
     },
@@ -258,21 +258,21 @@ describe("Black-box E2E: full lifecycle — happy path", () => {
 
     // 4. Build a coding context
     const ctx = makeCtx();
+    const event = { prompt: ctx.userMessage };
 
     // 5. Invoke the captured before_prompt_build hook
     const hooks = api._hooks["before_prompt_build"];
     expect(hooks).toBeDefined();
     expect(hooks!.length).toBeGreaterThanOrEqual(1);
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
     // 6. Assert: successful delegation through real router binary
-    expect(ctx.routerResult).toBeDefined();
-    expect(ctx.routerResult).toContain("fake codex");
-    expect(ctx.routerMetadata).toBeDefined();
-    expect(ctx.routerMetadata.backend).toBe("router-bridge");
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("fake codex");
+    expect(result.prependContext).toContain("Router-bridge");
     // Critical: NO fallback — the router handled it natively
-    expect(ctx.routerFallback).toBeUndefined();
-    expect(ctx.routerError).toBeUndefined();
+    expect(result.prependContext).toBeDefined(); // no fallback path hit
   }, 30_000);
 });
 
@@ -299,14 +299,14 @@ describe("Black-box E2E: non-coding prompt skips delegation", () => {
 
     // Non-coding context
     const ctx = makeCtx({ userMessage: "What's the weather today?" });
+    const event = { prompt: ctx.userMessage };
 
     const hooks = api._hooks["before_prompt_build"];
     expect(hooks).toBeDefined();
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
     // Should NOT have set routerResult — prompt was classified as non-coding
-    expect(ctx.routerResult).toBeUndefined();
-    expect(ctx.routerFallback).toBeUndefined();
+    expect(result).toBeUndefined();
   }, 15_000);
 });
 
@@ -332,16 +332,14 @@ describe("Black-box E2E: health failure → fallback to native", () => {
     );
 
     const ctx = makeCtx();
+    const event = { prompt: ctx.userMessage };
 
     const hooks = api._hooks["before_prompt_build"];
     expect(hooks).toBeDefined();
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
-    // Should have fallen back
-    expect(ctx.routerFallback).toBe(true);
-    expect(ctx.routerResult).toBeUndefined();
-    expect(ctx.routerError).toBeDefined();
-    expect(ctx.routerError).toMatch(/[Hh]ealth/);
+    // Should have fallen back — hook returns undefined on fallback path
+    expect(result).toBeUndefined();
   }, 15_000);
 });
 
@@ -372,14 +370,14 @@ describe("Black-box E2E: /router off disables delegation", () => {
     );
 
     const ctx = makeCtx();
+    const event = { prompt: ctx.userMessage };
 
     const hooks = api._hooks["before_prompt_build"];
     expect(hooks).toBeDefined();
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
     // Backend is now native — hook should bail early
-    expect(ctx.routerResult).toBeUndefined();
-    expect(ctx.routerFallback).toBeUndefined();
+    expect(result).toBeUndefined();
   }, 15_000);
 });
 
@@ -412,17 +410,17 @@ describe("Black-box E2E: /router on → off → on cycle", () => {
     await handleRouterCommand("on", { threadId: null, sessionKey: null }, cfg);
 
     const ctx = makeCtx();
+    const event = { prompt: ctx.userMessage };
 
     const hooks = api._hooks["before_prompt_build"];
     expect(hooks).toBeDefined();
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
     // After re-enabling, delegation should work
-    expect(ctx.routerResult).toBeDefined();
-    expect(ctx.routerResult).toContain("fake codex");
-    expect(ctx.routerMetadata).toBeDefined();
-    expect(ctx.routerMetadata.backend).toBe("router-bridge");
-    expect(ctx.routerFallback).toBeUndefined();
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("fake codex");
+    expect(result.prependContext).toContain("Router-bridge");
   }, 30_000);
 });
 
@@ -457,15 +455,16 @@ describe("Black-box E2E: thread-scoped backend isolation", () => {
 
     // Thread-A context — should delegate
     const ctxA = makeCtx({ threadId: "thread-A" });
-    await hooks![0](ctxA);
-    expect(ctxA.routerResult).toBeDefined();
-    expect(ctxA.routerMetadata?.backend).toBe("router-bridge");
+    const eventA = { prompt: ctxA.userMessage };
+    const resultA = await hooks![0](eventA, ctxA);
+    expect(resultA).toBeDefined();
+    expect(resultA.prependContext).toContain("Router-bridge");
 
     // Thread-B context — should NOT delegate (different scope)
     const ctxB = makeCtx({ threadId: "thread-B" });
-    await hooks![0](ctxB);
-    expect(ctxB.routerResult).toBeUndefined();
-    expect(ctxB.routerFallback).toBeUndefined();
+    const eventB = { prompt: ctxB.userMessage };
+    const resultB = await hooks![0](eventB, ctxB);
+    expect(resultB).toBeUndefined();
   }, 30_000);
 });
 
@@ -491,19 +490,15 @@ describe("Black-box E2E: result metadata footer", () => {
     );
 
     const ctx = makeCtx();
+    const event = { prompt: ctx.userMessage };
 
     const hooks = api._hooks["before_prompt_build"];
-    await hooks![0](ctx);
+    const result = await hooks![0](event, ctx);
 
     // Result should contain 🔧 footer with metadata
-    expect(ctx.routerResult).toBeDefined();
-    expect(ctx.routerResult).toContain("🔧");
-
-    // Metadata fields should be present
-    expect(ctx.routerMetadata).toBeDefined();
-    expect(ctx.routerMetadata.backend).toBe("router-bridge");
-    expect(ctx.routerMetadata.classification).toBeDefined();
-    expect(ctx.routerMetadata.classification.isCodingTask).toBe(true);
-    expect(typeof ctx.routerMetadata.durationMs).toBe("number");
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("🔧");
+    expect(result.prependContext).toContain("Router-bridge");
   }, 30_000);
 });

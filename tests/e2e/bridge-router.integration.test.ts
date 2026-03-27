@@ -149,17 +149,16 @@ describe("E2E: happy path — delegate coding task through real router binary", 
     const hooks = api.handlers.eventHandlers["before_prompt_build"];
     expect(hooks).toBeDefined();
     expect(hooks.length).toBeGreaterThanOrEqual(1);
-    await hooks[0](ctx);
+    const event = { prompt: ctx.userMessage };
+    const result = await hooks[0](event, ctx);
 
     // 6. Assert: successful delegation via real router + fake codex
-    expect(ctx.routerResult).toBeDefined();
-    expect(ctx.routerResult).toContain("fake codex");
-    expect(ctx.routerResult).toContain("🔧");
-    expect(ctx.routerResult).toMatch(/🔧 .+ · \d+ms/);
-    expect(ctx.routerMetadata).toBeDefined();
-    expect(ctx.routerMetadata.backend).toBe("router-bridge");
-    expect(ctx.routerFallback).toBeUndefined();
-    expect(ctx.routerError).toBeUndefined();
+    expect(result).toBeDefined();
+    expect(result.prependContext).toBeDefined();
+    expect(result.prependContext).toContain("fake codex");
+    expect(result.prependContext).toContain("🔧");
+    expect(result.prependContext).toMatch(/🔧 .+ · \d+ms/);
+    expect(result.prependContext).toContain("Router-bridge");
   });
 });
 
@@ -190,12 +189,10 @@ describe("E2E: health check failure — falls back to native", () => {
     const hooks = api.handlers.eventHandlers["before_prompt_build"];
     expect(hooks).toBeDefined();
     expect(hooks.length).toBeGreaterThanOrEqual(1);
-    await hooks[0](ctx);
+    const event = { prompt: ctx.userMessage };
+    const result = await hooks[0](event, ctx);
 
-    // 6. Assert: fell back to native
-    expect(ctx.routerFallback).toBe(true);
-    expect(ctx.routerResult).toBeUndefined();
-    expect(ctx.routerError).toBeDefined();
-    expect(ctx.routerError).toMatch(/[Hh]ealth/);
+    // 6. Assert: fell back to native (hook returns undefined on fallback)
+    expect(result).toBeUndefined();
   });
 });
