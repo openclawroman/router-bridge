@@ -1,7 +1,7 @@
 /**
  * E2E integration test: router-bridge + openclaw-router subprocess.
  *
- * No mocking of bridge internals. Only fakes: OpenClaw API, router subprocess shim.
+ * No mocking of bridge internals. Only fakes: OpenClaw API, executor CLIs.
  * The real code paths exercised:
  *   - register() (root index.ts)
  *   - shouldDelegateToExecutionBackend() (policy.ts)
@@ -9,6 +9,9 @@
  *   - SubprocessRouterAdapter (adapters/subprocess.ts)
  *   - classifyTask() (policy.ts)
  *   - before_prompt_build hook (registered by register())
+ *
+ * Test 1 uses the REAL openclaw-router binary with fake codex/claude
+ * executor shims so no real provider/API is needed.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import * as fs from "fs";
@@ -23,21 +26,14 @@ import {
   makeFakeApi,
 } from "./harness";
 
-// ── Fake router shim ──────────────────────────────────────────────────────
-// Simulates a successful openclaw-router run. Matches the JSON schema that
-// SubprocessRouterAdapter.normalizeResponse() expects.
-const SHIM_SCRIPT = `#!/bin/sh
-# Read payload from stdin (discard — we don't need it for the shim)
-cat > /dev/null
-cat <<'EOF'
-{"protocol_version":1,"task_id":"shim-task","tool":"codex_cli","backend":"openai_native","model_profile":"codex_primary","success":true,"normalized_error":null,"exit_code":0,"latency_ms":42,"request_id":null,"cost_estimate_usd":0.001,"artifacts":[],"stdout_ref":null,"stderr_ref":null,"final_summary":"Task completed successfully by router shim"}
-EOF
-`;
+// ── Real router path ─────────────────────────────────────────────────
+const REAL_ROUTER = "/tmp/openclaw-router/bin/ai-code-runner";
 
-// ── Shared temp state ─────────────────────────────────────────────────────
+// ── Shared temp state ─────────────────────────────────────────────────
 let tmpDir: string;
 let binDir: string;
 let configDir: string;
+let savedPath: string | undefined;
 let savedRouterRoot: string | undefined;
 let savedHome: string | undefined;
 
@@ -57,19 +53,62 @@ beforeAll(() => {
   fs.mkdirSync(path.join(tmpDir, "runtime", "bridge"), { recursive: true });
   fs.mkdirSync(path.join(tmpDir, "runtime", "router"), { recursive: true });
 
-  // Write a minimal router.config.json
+  // ── Fake executor shims ──────────────────────────────────────────
+  // These match the CLI conventions the real openclaw-router expects:
+  //   codex [--model X] SUMMARY   → prints success to stdout, exits 0
+  //   claude -p SUMMARY           → prints success to stdout, exits 0
+  writeExecutableShim(
+    binDir,
+    "codex",
+    "#!/bin/sh\necho \"Token refresh flow implemented by fake codex\"\nexit 0\n",
+  );
+  writeExecutableShim(
+    binDir,
+    "claude",
+    "#!/bin/sh\necho \"Task completed by fake claude\"\nexit 0\n",
+  );
+
+  // Prepend fake bin dir to PATH so the router finds our shims first
+  savedPath = process.env.PATH;
+  process.env.PATH = binDir + ":" + (process.env.PATH || "");
+
+  // Write a minimal router.config.json that the real router can load
   fs.mkdirSync(configDir, { recursive: true });
   fs.writeFileSync(
     path.join(configDir, "router.config.json"),
-    JSON.stringify({
-      router_config_version: 1,
-      provider: { openrouter: { api_key_env: "OPENROUTER_API_KEY" } },
-      routing: {
-        default_executor: "openrouter",
-        rules: [{ task_class: "implementation", executor: "codex_cli" }],
+    JSON.stringify(
+      {
+        version: 1,
+        budget: { enabled: false },
+        models: {
+          codex: { default: "codex-default", gpt54: "gpt-5.4", gpt54_mini: "gpt-5.4-mini" },
+          claude: { default: "claude-default", sonnet: "claude-sonnet-4.6", opus: "claude-opus-4.6" },
+          openrouter: { minimax: "minimax/minimax-m2.7", kimi: "moonshotai/kimi-k2.5", mimo: "xiaomi/mimo-v2-pro" },
+        },
+        routing: {
+          openai_primary: {
+            chain: ["codex_cli", "openrouter"],
+            timeout_s: 120,
+          },
+        },
+        timeout: { default_ms: 30000 },
+        tools: {
+          codex_cli: {
+            profiles: {
+              openai_native: { model: "gpt-5.4", timeout_s: 300 },
+            },
+          },
+        },
+        reliability: {
+          chain_timeout_s: 600,
+          max_fallbacks: 3,
+          circuit_breaker: { threshold: 5, window_s: 60, cooldown_s: 120 },
+        },
+        logging: { jsonl_path: "runtime/routing.jsonl" },
       },
-      timeout: { default_ms: 120_000 },
-    }),
+      null,
+      2,
+    ),
   );
 });
 
@@ -78,24 +117,18 @@ afterAll(() => {
   if (savedRouterRoot !== undefined) process.env.OPENCLAW_ROUTER_ROOT = savedRouterRoot;
   else delete process.env.OPENCLAW_ROUTER_ROOT;
   if (savedHome !== undefined) process.env.HOME = savedHome;
+  if (savedPath !== undefined) process.env.PATH = savedPath;
 
   // Clean up temp dir
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-// ── Test 1: happy path ────────────────────────────────────────────────────
-describe("E2E: happy path — delegate coding task through real router subprocess", () => {
-  let routerShimPath: string;
-
-  beforeAll(() => {
-    // Write the fake router shim that returns success
-    routerShimPath = writeExecutableShim(binDir, "ai-code-runner", SHIM_SCRIPT);
-  });
-
-  it("delegates coding task through real router subprocess", async () => {
-    // 1. Create fake OpenClaw API with config overrides
+// ── Test 1: happy path (real router + fake executors) ─────────────────
+describe("E2E: happy path — delegate coding task through real router binary", () => {
+  it("delegates coding task through real router with fake codex executor", async () => {
+    // 1. Create fake OpenClaw API pointing at the real router binary
     const api = makeFakeApi({
-      routerCommand: routerShimPath,
+      routerCommand: REAL_ROUTER,
       routerConfigPath: path.join(configDir, "router.config.json"),
       healthCacheTtlMs: 0, // no caching for test isolation
     });
@@ -118,9 +151,9 @@ describe("E2E: happy path — delegate coding task through real router subproces
     expect(hooks.length).toBeGreaterThanOrEqual(1);
     await hooks[0](ctx);
 
-    // 6. Assert: successful delegation
+    // 6. Assert: successful delegation via real router + fake codex
     expect(ctx.routerResult).toBeDefined();
-    expect(ctx.routerResult).toContain("Task completed successfully");
+    expect(ctx.routerResult).toContain("fake codex");
     expect(ctx.routerMetadata).toBeDefined();
     expect(ctx.routerMetadata.backend).toBe("router-bridge");
     expect(ctx.routerFallback).toBeUndefined();
@@ -128,7 +161,7 @@ describe("E2E: happy path — delegate coding task through real router subproces
   });
 });
 
-// ── Test 2: health/fallback path ──────────────────────────────────────────
+// ── Test 2: health/fallback path ──────────────────────────────────────
 describe("E2E: health check failure — falls back to native", () => {
   it("falls back to native when health check fails", async () => {
     // 1. Create fake API — routerCommand points to /bin/false (always exits 1)
