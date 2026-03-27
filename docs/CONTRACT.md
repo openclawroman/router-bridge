@@ -33,7 +33,7 @@ Key fields:
   - `thread_id`: Thread identifier (nullable)
   - `session_id`: Session identifier (nullable)
 - `context`: Execution context:
-  - `working_directory`: Working directory path
+  - `working_directory`: **Required** — Working directory path. Codex exec (`codex exec [prompt]`) will fail with `toolchain_error` if this is not set. The bridge always sets this from the current task context.
   - `git_branch`: Current git branch
   - `git_commit`: Current git commit (optional)
   - `recent_files`: Recently modified files (optional)
