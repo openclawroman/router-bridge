@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 import {
   getPluginVersion,
   checkVersionCompatibility,
@@ -29,6 +31,19 @@ describe("checkVersionCompatibility", () => {
     expect(info).toHaveProperty("issues");
     expect(Array.isArray(info.issues)).toBe(true);
     expect(info.requiredRouterVersion).toBe(REQUIRED_ROUTER_VERSION);
+  });
+});
+
+describe("version sanity", () => {
+  it("plugin version matches package.json", () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8")
+    );
+    expect(getPluginVersion()).toBe(pkg.version);
+  });
+
+  it("plugin version is not fallback 0.0.0", () => {
+    expect(getPluginVersion()).not.toBe("0.0.0");
   });
 });
 

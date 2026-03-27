@@ -159,7 +159,9 @@ function checkHealthProbe(config: PluginConfig): DoctorCheck {
   const baseArgs = parts.slice(1);
 
   try {
-    const output = execFileSync(executable, [...baseArgs, "--health"], {
+    const cfgPath = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+    const configArgs = config.routerConfigPath ? ["--config", cfgPath] : [];
+    const output = execFileSync(executable, [...configArgs, ...baseArgs, "--health"], {
       timeout: 10000,
       encoding: "utf-8",
     }).trim();

@@ -38,7 +38,12 @@ function getInstalledRouterVersion(): string | null {
  * Get the plugin version from package.json or VERSION file.
  */
 export function getPluginVersion(): string {
-  return "0.6.0";
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
 }
 
 /**

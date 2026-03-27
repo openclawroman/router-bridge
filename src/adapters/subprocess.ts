@@ -315,7 +315,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
         ...process.env,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
       };
-      const output = execFileSync(executable, [...baseArgs, "--health"], {
+      const output = execFileSync(executable, ["--config", this.routerConfigPath, ...baseArgs, "--health"], {
         timeout: 10000,
         encoding: "utf-8",
         env,
