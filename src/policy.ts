@@ -64,6 +64,7 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     // Ukrainian coding action verbs - use (?:^|\s) boundary since \b fails with Cyrillic
     { pattern: /(?:^|\s)(запрограмуй|розроби|створи|напиши|зроби|виконай|реалізуй|створити|програмуй|кодуй)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
     { pattern: /(?:^|\s)(виправ|відлагодь|тестуй|скомпілюй|запусти)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
+    { pattern: /hello.world/i, label: "hello-world" },
   ];
 
   // Non-coding signals
@@ -72,10 +73,14 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     { pattern: /(?:^|[^\p{L}\p{N}])(what is|who is|when was|where is|how does|explain|define|tell me about|що таке|хто такий|коли|де|як|поясни|визнач|розкажи)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question" },
     { pattern: /(?:^|[^\p{L}\p{N}])(weather|time|date|news|translate|convert|calculate|погода|час|дата|новини|переклад|конвертуй|порахуй)(?:[^\p{L}\p{N}]|$)/i, label: "utility-request" },
     { pattern: /(?:^|[^\p{L}\p{N}])(opinion|think|feel|prefer|suggest|recommend|думка|вважаєш|порад|пропоную|рекомендуй)(?:[^\p{L}\p{N}]|$)/i, label: "opinion-request" },
+    { pattern: /(?:^|[^\p{L}\p{N}])(чому|навіщо|яким чином)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question-ua" },
   ];
 
   let codingScore = 0;
   let chatScore = 0;
+
+  // Code indicators — presence of quotes, braces, semicolons, or "world" suggests code
+  const hasCodeIndicators = /["'`{}();]|world|console|print|hello.world/i.test(lower);
 
   for (const { pattern, label } of codingPatterns) {
     if (pattern.test(lower)) {
@@ -85,6 +90,8 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   }
 
   for (const { pattern, label } of chatPatterns) {
+    // Skip greeting pattern when text contains code indicators (e.g. "Hello, World!")
+    if (label === "greeting/ack" && hasCodeIndicators) continue;
     if (pattern.test(lower)) {
       chatScore += 1;
       signals.push("!" + label);
