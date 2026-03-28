@@ -63,7 +63,7 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     { pattern: /(?:^|[^\p{L}\p{N}])(repo|repository|codebase|project|source|src)(?:[^\p{L}\p{N}]|$)/i, label: "codebase-reference" },
     // Ukrainian coding action verbs - use (?:^|\s) boundary since \b fails with Cyrillic
     { pattern: /(?:^|\s)(запрограмуй|розроби|створи|напиши|зроби|виконай|реалізуй|створити|програмуй|кодуй)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
-    { pattern: /(?:^|\s)(виправ|відлагодь|тестуй|скомпілюй|запусти)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
+    { pattern: /(?:^|\s)(виправ|відлагодь|тестуй|скомпілюй|запусти|рефактори|додай|перероби|почни)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
     { pattern: /hello.world/i, label: "hello-world" },
   ];
 
@@ -75,6 +75,46 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     { pattern: /(?:^|[^\p{L}\p{N}])(opinion|think|feel|prefer|suggest|recommend|думка|вважаєш|порад|пропоную|рекомендуй)(?:[^\p{L}\p{N}]|$)/i, label: "opinion-request" },
     { pattern: /(?:^|[^\p{L}\p{N}])(чому|навіщо|яким чином)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question-ua" },
   ];
+
+  // --- Execution intent detection (EN + UK) ---
+  const executionPatterns = [
+    /(?:^|\s)(реалізуй|напиши|створи|зроби|виконай|write|create|implement|build|code|develop|fix|patch|deploy|test)(?:\s|,|\.|!|$)/i,
+    /(?:^|\s)(дороби|почни|займись|створити|написати|побудуй|виправ|перероби|почати|рефактори|додай)(?:\s|,|\.|!|$)/i,
+  ];
+
+  const explanationPatterns = [
+    /(?:^|\s)(поясни|що робить|як працює|чому|навіщо|explain|what does|how does|why|tell me about|describe)(?:\s|,|\.|!|$)/i,
+    /(?:^|\s)(порівняй|compare|analyze|проаналізуй|визнач|define)(?:\s|,|\.|!|$)/i,
+    /\?\s*$/,  // trailing question mark
+  ];
+
+  const execMatches = executionPatterns.some(p => p.test(text));
+  const explMatches = explanationPatterns.some(p => p.test(text));
+
+  // Strong signals that always indicate coding (file paths, code fences, stacktraces)
+  const hasStrongSignals = /[\w\-\/]+\.\w{2,4}\b|```|~~~|traceback|stacktrace|exception at/i.test(text);
+
+  let executionIntent: boolean;
+  if (hasStrongSignals) {
+    // Strong signal override — always treat as execution intent
+    executionIntent = true;
+  } else if (explMatches && !execMatches) {
+    executionIntent = false;
+  } else if (execMatches && !explMatches) {
+    executionIntent = true;
+  } else if (execMatches && explMatches) {
+    // Mixed intent: count which signal type dominates
+    const execSignalCount = executionPatterns.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
+    const explSignalCount = explanationPatterns.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
+    executionIntent = execSignalCount >= explSignalCount;
+  } else {
+    // Neither matched — fall back to existing scoring logic
+    executionIntent = true; // default, scoring below decides
+  }
+
+  if (execMatches) signals.push("execution-intent");
+  if (explMatches) signals.push("explanation-intent");
+  if (hasStrongSignals) signals.push("strong-signal");
 
   let codingScore = 0;
   let chatScore = 0;
@@ -106,22 +146,13 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
 
   const total = codingScore + chatScore;
   const codingConfidence = total > 0 ? codingScore / total : 0.3;
-  const isCoding = codingConfidence >= 0.5 && codingScore >= 1;
+  const isCoding = hasStrongSignals || (executionIntent && codingConfidence >= 0.5 && codingScore >= 1);
 
   // Resolve taskClass for router
+  const hasPlanningKeyword = /plan|planning|strategy|architecture|design|сплан|архітектур/i.test(lower);
   const taskClass = isCoding
-    ? lower.match(/\b(refactor|optimi[zs]e)\b/i)
-      ? "refactor"
-      : lower.match(/\b(debug|trace|diagnose)\b/i)
-        ? "debug"
-        : lower.match(/\b(test|testing|unittest|coverage|spec|assert)/i)
-          ? "test_generation"
-          : lower.match(/\b(review)\b/i)
-            ? "code_review"
-            : "implementation"
-    : lower.match(/\b(plan|planning|strategy|architecture|design)\b/i)
-      ? "planner"
-      : "implementation";
+    ? (codingScore >= 1 ? categorizeCodingTask(lower) : "other")
+    : hasPlanningKeyword ? "planner" : "other";
 
   return {
     isCodingTask: isCoding,
@@ -130,6 +161,20 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     confidence: codingConfidence,
     signals,
   };
+}
+
+function categorizeCodingTask(text: string): string {
+  if (/виправ|баг|помилка|debug|fix|bug|error|exception|crash|traceback|відлагодь/i.test(text))
+    return "debug";
+  if (/рефактор|перероби|optimize|refactor|cleanup|очисти|покращ|rewrite/i.test(text))
+    return "refactor";
+  if (/тест|test|coverage|покриття|unittest|юніт-тест|spec|assert/i.test(text))
+    return "test_generation";
+  if (/review|огляд|перевір|check|перевірь|code review/i.test(text))
+    return "code_review";
+  if (/сплануй|план|plan|architecture|архітектура|design|дизайн|підхід|approach/i.test(text))
+    return "planner";
+  return "implementation";
 }
 
 export async function shouldDelegateToExecutionBackend(
