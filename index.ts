@@ -117,7 +117,7 @@ export default function register(api: any) {
             const parts: string[] = [];
             if (result.tool) parts.push(TOOL_LABELS[result.tool] || result.tool);
             if (result.backend) parts.push(BACKEND_LABELS[result.backend] || result.backend);
-            if (result.model) parts.push(result.model);
+            if (result.model) parts.push(MODEL_DISPLAY_NAMES[result.model] || result.model);
             if (result.durationMs) parts.push(`${(result.durationMs / 1000).toFixed(1)}s`);
             if (result.costEstimateUsd && result.costEstimateUsd > 0) parts.push(`$${result.costEstimateUsd.toFixed(4)}`);
 
