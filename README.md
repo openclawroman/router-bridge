@@ -74,7 +74,7 @@ index.ts                  ← Plugin entry: registers command + skill + service
 │   └── SKILL.md          ← Trigger patterns for natural language
 ├── docs/
 │   └── MIGRATION.md      ← Phase 1 → Phase 2 migration guide
-├── tests/                ← 298 tests across 32 files
+├── tests/                ← 405 tests across 43 files
 └── openclaw.plugin.json  ← Manifest with configSchema
 ```
 
