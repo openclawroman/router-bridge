@@ -9,8 +9,8 @@ describe("signal-matrix: language-independent coding signals", () => {
     { input: "看看 lib/utils.js 怎么了", expected: "coding", note: "Chinese + file path" },
     { input: "create auth.ts", expected: "coding", note: "file extension at end" },
     { input: "створи auth.ts", expected: "coding", note: "Ukrainian + file extension at end" },
-    { input: "Чому не працює main.py?", expected: "coding", note: "Ukrainian question + file = strong signal wins" },
-    { input: "What does ./config.json do?", expected: "coding", note: "question + file = strong signal overrides" },
+    { input: "Чому не працює main.py?", expected: "chat", note: "Ukrainian question + file = question, not coding" },
+    { input: "What does ./config.json do?", expected: "other", note: "question + file = not coding" },
 
     // ── Code fences → coding ──
     { input: "Here's the code:\n```python\nprint('hello')\n```", expected: "coding", note: "code fence" },
