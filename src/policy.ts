@@ -3,6 +3,10 @@ import { ExecutionBackendStore } from "./store";
 import { store } from "./commands";
 import type { HealthResult, TaskEnvelope } from "./adapters/base";
 import { createAdapter } from "./adapters/factory";
+import { ALL_PATTERNS } from "./classifier/lexicon";
+
+// Re-export lexicon types and data for testing
+export { LEXICON, ALL_PATTERNS, type PatternEntry, type Lexicon, type LexiconGroup, type WeightTier } from "./classifier/lexicon";
 
 export interface DelegationDecision {
   delegate: boolean;
@@ -48,58 +52,32 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   const lower = text.toLowerCase();
   const signals: string[] = [];
 
-  // Coding signals
-  // Unicode-aware: use (?:^|[^\p{L}\p{N}]) for word boundaries to handle Cyrillic
-  // For simple word lists, use (?:^|\s) before and look-ahead after
-  const codingPatterns = [
-    { pattern: /(?:^|[^\p{L}\p{N}])(write|create|implement|build|code|program|develop|fix|patch)(?:[^\p{L}\p{N}]|$).*(?:^|[^\p{L}\p{N}])(code|function|class|module|component|api|endpoint|script)(?:[^\p{L}\p{N}]|$)/i, label: "action+artifact" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(refactor|optimize|debug|trace|diagnose)(?:[^\p{L}\p{N}]|$)/i, label: "code-modification" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(fix|bug|error|exception|crash|stacktrace|traceback)(?:[^\p{L}\p{N}]|$)/i, label: "debugging" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(test|unittest|coverage|spec|assert)(?:[^\p{L}\p{N}]|$)/i, label: "testing" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(commit|push|merge|branch|pr|pull request|rebase)(?:[^\p{L}\p{N}]|$)/i, label: "git-operations" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(deploy|build|ci|cd|pipeline|docker|container)(?:[^\p{L}\p{N}]|$)/i, label: "devops" },
-    { pattern: /\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt)(?:[^\p{L}\p{N}]|$)/i, label: "file-extension" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(function|method|class|interface|type|struct|enum|import|export|require|async|await)(?:[^\p{L}\p{N}]|$)/i, label: "code-keyword" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(repo|repository|codebase|project|source|src)(?:[^\p{L}\p{N}]|$)/i, label: "codebase-reference" },
-    // Ukrainian coding action verbs - use (?:^|\s) boundary since \b fails with Cyrillic
-    { pattern: /(?:^|\s)(запрограмуй|розроби|створи|напиши|зроби|виконай|реалізуй|створити|програмуй|кодуй)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
-    { pattern: /(?:^|\s)(виправ|відлагодь|тестуй|скомпілюй|запусти)(?:\s|,|\.|!|$)/i, label: "coding-action-ua" },
-    { pattern: /hello.world/i, label: "hello-world" },
-  ];
-
-  // Non-coding signals
-  const chatPatterns = [
-    { pattern: /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|maybe|привіт|дякую|ок|так|ні|може)(?:\s|,|\.|!|$)/i, label: "greeting/ack" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(what is|who is|when was|where is|how does|explain|define|tell me about|що таке|хто такий|коли|де|як|поясни|визнач|розкажи)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(weather|time|date|news|translate|convert|calculate|погода|час|дата|новини|переклад|конвертуй|порахуй)(?:[^\p{L}\p{N}]|$)/i, label: "utility-request" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(opinion|think|feel|prefer|suggest|recommend|думка|вважаєш|порад|пропоную|рекомендуй)(?:[^\p{L}\p{N}]|$)/i, label: "opinion-request" },
-    { pattern: /(?:^|[^\p{L}\p{N}])(чому|навіщо|яким чином)(?:[^\p{L}\p{N}]|$)/i, label: "knowledge-question-ua" },
-  ];
-
   let codingScore = 0;
   let chatScore = 0;
 
   // Code indicators — presence of quotes, braces, semicolons, or "world" suggests code
   const hasCodeIndicators = /["'`{}();]|world|console|print|hello.world/i.test(lower);
 
-  for (const { pattern, label } of codingPatterns) {
-    if (pattern.test(lower)) {
-      codingScore += 1;
-      signals.push(label);
-    }
-  }
-
-  for (const { pattern, label } of chatPatterns) {
+  // Run all lexicon-based patterns with weighted scoring
+  for (const entry of ALL_PATTERNS) {
     // Skip greeting pattern when text contains code indicators (e.g. "Hello, World!")
-    if (label === "greeting/ack" && hasCodeIndicators) continue;
-    if (pattern.test(lower)) {
-      chatScore += 1;
-      signals.push("!" + label);
+    if (entry.label === "greeting/ack" && hasCodeIndicators) continue;
+
+    if (entry.pattern.test(lower)) {
+      if (entry.group === "chat" || entry.label.startsWith("knowledge")) {
+        chatScore += entry.weight;
+        signals.push("!" + entry.label);
+      } else {
+        codingScore += entry.weight;
+        signals.push(entry.label);
+      }
     }
   }
 
-  // Planning without execution intent = not coding
-  if (/\b(plan|strategy|architecture|design|approach)\b/i.test(lower) && !/\b(implement|build|code|create)\b/i.test(lower)) {
+  // Planning without execution intent = not coding (backward compat)
+  const hasPlanningOnly = /(?:^|[^\p{L}\p{N}])(plan|strategy|architecture)(?:[^\p{L}\p{N}]|$)/iu.test(lower);
+  const hasExecutionIntent = /(?:^|[^\p{L}\p{N}])(implement|build|code|create)(?:[^\p{L}\p{N}]|$)/iu.test(lower);
+  if (hasPlanningOnly && !hasExecutionIntent) {
     chatScore += 0.5;
     signals.push("!planning-only");
   }
