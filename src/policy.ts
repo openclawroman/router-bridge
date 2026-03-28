@@ -54,33 +54,63 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   const normalized = normalizeText(text);
   const signals: string[] = [];
 
-  // Strong signals (language-independent) — score 2 each, override chat signals
-  const strongSignals: { regex: RegExp; label: string }[] = [
-    // File paths: src/foo.ts, ./lib/utils.js, /path/to/file.py
-    { regex: /(?:^|\s)(\.\/|\/)?[\w\-\/]+\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt|sh|yaml|yml|json|toml|nix|dockerfile)\b/i, label: "file-path" },
-    // Code fences: ``` or ~~~
+  // ── Execution / Explanation intent detection (EN + UK) ──
+  const executionPatterns = [
+    /(?:^|\s)(реалізуй|напиши|створи|зроби|виконай|write|create|implement|build|code|develop|fix|patch|deploy|test)(?:\s|,|\.|!|$)/i,
+    /(?:^|\s)(дороби|почни|займись|створити|написати|побудуй|виправ|перероби|почати|рефактори|додай)(?:\s|,|\.|!|$)/i,
+  ];
+  const explanationPatterns = [
+    /(?:^|\s)(поясни|що робить|як працює|чому|навіщо|explain|what does|how does|why|tell me about|describe)(?:\s|,|\.|!|$)/i,
+    /(?:^|\s)(порівняй|compare|analyze|проаналізуй|визнач|define)(?:\s|,|\.|!|$)/i,
+    /\?\s*$/,  // trailing question mark
+  ];
+  const execMatches = executionPatterns.some(p => p.test(text));
+  const explMatches = explanationPatterns.some(p => p.test(text));
+
+  // Strong signals: language-independent coding indicators
+  const strongSignalPatterns: { regex: RegExp; label: string }[] = [
     { regex: /```|~~~/i, label: "code-fence" },
-    // Stacktrace markers
-    { regex: /(?:traceback|stacktrace|at\s+\w+\.\w+\(|Error:|Exception:|TypeError:|ValueError:|SyntaxError:|Segmentation fault|panic:)/i, label: "stacktrace" },
-    // Git markers (use (?:^|\s) for Cyrillic compatibility)
+    { regex: /(?:traceback|stacktrace|at\s+\w+\.\w+\(|Error:|Exception:|SyntaxError|TypeError|ReferenceError|AssertionError|segfault|core dumped|segmentation fault)/i, label: "stacktrace" },
+    { regex: /(?:^|\s)(\.\/|\/)?[\w\-\/]+\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt|sh|yaml|yml|json|toml|nix|dockerfile)\b/i, label: "file-path" },
     { regex: /(?:^|\s)(PR\s*#?\d+|commit|diff|merge\s*conflict)(?:\s|$|[.!,:])/i, label: "git-marker" },
-    // CI/CD markers
     { regex: /\bCI\b|\bCD\b|\bpipeline\b|\bGitHub Actions\b|\b\.github\//i, label: "ci-marker" },
-    // Code syntax indicators: function() { blocks
     { regex: /\b\w+\s*\([^)]*\)\s*\{/, label: "code-syntax" },
-    // Assignment: x = value — require code-like context (keyword or function call RHS)
     { regex: /\b(?:const|let|var|config|result|name|path|value|port|host|url|env|module|export|import)\s*=\s*\w+/i, label: "assignment" },
     { regex: /\b\w+\s*=\s*\w+\([^)]*\)/, label: "assignment" },
   ];
-
-  let strongCodingScore = 0;
-  for (const { regex, label } of strongSignals) {
+  let hasStrongSignals = false;
+  for (const { regex, label } of strongSignalPatterns) {
     if (regex.test(text)) {
-      strongCodingScore += 2;
-      signals.push(label);
+      hasStrongSignals = true;
+      if (!signals.includes(label)) signals.push(label);
     }
   }
 
+  // Hard strong signals: code fences and stacktraces always force coding
+  const hasHardStrongSignals = signals.some(s => s === "code-fence" || s === "stacktrace");
+
+  let executionIntent: boolean;
+  if (hasHardStrongSignals) {
+    // Code fences and stacktraces always indicate execution
+    executionIntent = true;
+  } else if (hasStrongSignals && !explMatches) {
+    // File paths without questions = execution
+    executionIntent = true;
+  } else if (explMatches && !execMatches) {
+    executionIntent = false;
+  } else if (execMatches && !explMatches) {
+    executionIntent = true;
+  } else if (execMatches && explMatches) {
+    const execSignalCount = executionPatterns.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
+    const explSignalCount = explanationPatterns.reduce((n, p) => n + (p.test(text) ? 1 : 0), 0);
+    executionIntent = execSignalCount >= explSignalCount;
+  } else {
+    executionIntent = true; // default — scoring below decides
+  }
+
+  if (execMatches) signals.push("execution-intent");
+  if (explMatches) signals.push("explanation-intent");
+  if (hasStrongSignals) signals.push("strong-signal");
   let codingScore = 0;
   let chatScore = 0;
 
@@ -103,36 +133,25 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
     }
   }
 
-  // Planning without execution intent = not coding (backward compat)
+  // Planning without execution intent = not coding
   const hasPlanningOnly = /(?:^|[^\p{L}\p{N}])(plan|strategy|architecture)(?:[^\p{L}\p{N}]|$)/iu.test(normalized);
-  const hasExecutionIntent = /(?:^|[^\p{L}\p{N}])(implement|build|code|create)(?:[^\p{L}\p{N}]|$)/iu.test(normalized);
-  if (hasPlanningOnly && !hasExecutionIntent) {
+  if (hasPlanningOnly && !execMatches) {
     chatScore += 0.5;
     signals.push("!planning-only");
   }
 
-  // Strong signals (language-independent) add to codingScore and override chat
-  codingScore += strongCodingScore;
-
   const total = codingScore + chatScore;
   const codingConfidence = total > 0 ? codingScore / total : 0.3;
-  // Strong signals (≥2) override chat — force coding when strong signals present
-  const isCoding = strongCodingScore >= 2 || (codingConfidence >= 0.5 && codingScore >= 1);
+  // Strong signals alone is NOT enough — must also have execution intent or coding patterns
+  // Exception: file-path-only strong signals with explanation intent = question, not coding
+  const filePathOnly = hasStrongSignals && !hasHardStrongSignals && explMatches && !execMatches;
+  const isCoding = (!filePathOnly && hasHardStrongSignals) || (hasStrongSignals && executionIntent) || (executionIntent && codingConfidence >= 0.5 && codingScore >= 1) || (hasHardStrongSignals && codingScore > 0);
 
   // Resolve taskClass for router
+  const hasPlanningKeyword = /plan|planning|strategy|architecture|design|сплан|архітектур/i.test(normalized);
   const taskClass = isCoding
-    ? normalized.match(/\b(refactor|optimi[zs]e)\b/i)
-      ? "refactor"
-      : normalized.match(/\b(debug|trace|diagnose)\b/i)
-        ? "debug"
-        : normalized.match(/\b(test|testing|unittest|coverage|spec|assert)/i)
-          ? "test_generation"
-          : normalized.match(/\b(review)\b/i)
-            ? "code_review"
-            : "implementation"
-    : normalized.match(/\b(plan|planning|strategy|architecture|design)\b/i)
-      ? "planner"
-      : "implementation";
+    ? (codingScore >= 1 || hasHardStrongSignals ? categorizeCodingTask(normalized, executionIntent) : "other")
+    : hasPlanningKeyword ? "planner" : "other";
 
   const result: TaskClassification = {
     isCodingTask: isCoding,
@@ -146,6 +165,21 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   recordClassification(text, normalized, result);
 
   return result;
+}
+
+function categorizeCodingTask(text: string, executionIntent: boolean): string {
+  if (/виправ|баг|помилка|debug|fix|bug|error|exception|crash|traceback|відлагодь/i.test(text))
+    return "debug";
+  if (/рефактор|перероби|optimize|refactor|cleanup|очисти|покращ|rewrite/i.test(text))
+    return "refactor";
+  if (/тест|test|coverage|покриття|unittest|юніт-тест|spec|assert/i.test(text))
+    return "test_generation";
+  if (/review|огляд|перевір|check|перевірь|code review/i.test(text))
+    return "code_review";
+  // Only classify as planner when there's no execution intent
+  if (/сплануй|план|plan|architecture|архітектура|design|дизайн|підхід|approach/i.test(text) && !executionIntent)
+    return "planner";
+  return "implementation";
 }
 
 export async function shouldDelegateToExecutionBackend(
