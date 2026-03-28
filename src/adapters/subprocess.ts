@@ -40,6 +40,7 @@ interface RouterResponse {
   tool?: string;
   backend?: string;
   model_profile?: string;
+  model_name?: string;
   success: boolean;
   normalized_error?: string | null;
   exit_code?: number;
@@ -437,8 +438,8 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
             ?? parsed.error
             ?? "";
 
-          // Extract model — prefer model_profile, fallback to model
-          const model = parsed.model_profile ?? parsed.model;
+          // Extract model — prefer model_name, then model_profile, fallback to model
+          const model = parsed.model_name ?? parsed.model_profile ?? parsed.model;
 
           // Extract cost — prefer cost_estimate_usd (router), fallback to cost_usd (legacy)
           const cost = parsed.cost_estimate_usd ?? parsed.cost_usd;
