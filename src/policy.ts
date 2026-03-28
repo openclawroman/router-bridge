@@ -4,6 +4,8 @@ import { store } from "./commands";
 import type { HealthResult, TaskEnvelope } from "./adapters/base";
 import { createAdapter } from "./adapters/factory";
 import { ALL_PATTERNS } from "./classifier/lexicon";
+import { normalizeText } from "./classifier/normalize";
+import { recordClassification } from "./classifier/metrics";
 
 // Re-export lexicon types and data for testing
 export { LEXICON, ALL_PATTERNS, type PatternEntry, type Lexicon, type LexiconGroup, type WeightTier } from "./classifier/lexicon";
@@ -49,36 +51,48 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   if (!text || !text.trim()) {
     return { isCodingTask: false, taskType: "chat", taskClass: "implementation", confidence: 0, signals: ["empty-input"] };
   }
-  const lower = text.toLowerCase();
+  const normalized = normalizeText(text);
   const signals: string[] = [];
+
+  // Strong signals (language-independent) — score 2 each, override chat signals
+  const strongSignals: { regex: RegExp; label: string }[] = [
+    // File paths: src/foo.ts, ./lib/utils.js, /path/to/file.py
+    { regex: /(?:^|\s)(\.\/|\/)?[\w\-\/]+\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt|sh|yaml|yml|json|toml|nix|dockerfile)\b/i, label: "file-path" },
+    // Code fences: ``` or ~~~
+    { regex: /```|~~~/i, label: "code-fence" },
+    // Stacktrace markers
+    { regex: /(?:traceback|stacktrace|at\s+\w+\.\w+\(|Error:|Exception:|TypeError:|ValueError:|SyntaxError:|Segmentation fault|panic:)/i, label: "stacktrace" },
+    // Git markers (use (?:^|\s) for Cyrillic compatibility)
+    { regex: /(?:^|\s)(PR\s*#?\d+|commit|diff|merge\s*conflict)(?:\s|$|[.!,:])/i, label: "git-marker" },
+    // CI/CD markers
+    { regex: /\bCI\b|\bCD\b|\bpipeline\b|\bGitHub Actions\b|\b\.github\//i, label: "ci-marker" },
+    // Code syntax indicators: function() { blocks
+    { regex: /\b\w+\s*\([^)]*\)\s*\{/, label: "code-syntax" },
+    // Assignment: x = value — require code-like context (keyword or function call RHS)
+    { regex: /\b(?:const|let|var|config|result|name|path|value|port|host|url|env|module|export|import)\s*=\s*\w+/i, label: "assignment" },
+    { regex: /\b\w+\s*=\s*\w+\([^)]*\)/, label: "assignment" },
+  ];
+
+  let strongCodingScore = 0;
+  for (const { regex, label } of strongSignals) {
+    if (regex.test(text)) {
+      strongCodingScore += 2;
+      signals.push(label);
+    }
+  }
 
   let codingScore = 0;
   let chatScore = 0;
 
   // Code indicators — presence of quotes, braces, semicolons, or "world" suggests code
-  const hasCodeIndicators = /["'`{}();]|world|console|print|hello.world/i.test(lower);
-
-  // Strong signals: language-independent coding indicators (score 2 each)
-  const strongSignals: { regex: RegExp; label: string }[] = [
-    { regex: /(?:^|\s)(\.\/|\/)?[\w\-\/]+\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt|sh|yaml|yml|json|toml|nix|dockerfile|test\.ts)(?:\s|,|\.|!|$|\?)/i, label: "file-path" },
-    { regex: /```|~~~/i, label: "code-fence" },
-    { regex: /(?:traceback|stacktrace|at\s+\w+\.\w+\(|Error:|Exception:|SyntaxError|TypeError|ReferenceError|AssertionError|segfault|core dumped|segmentation fault)/i, label: "stacktrace" },
-    { regex: /(?:^|\s)(PR\s*#?\d+|commit|diff|merge\s*conflict)(?:\s|$|[.!,:])/i, label: "git-marker" },
-    { regex: /\bCI\b|\bCD\b|\bpipeline\b|\bGitHub Actions\b|\b\.github\//i, label: "ci-marker" },
-    { regex: /\b\w+\s*\([^)]*\)\s*\{/, label: "code-syntax" },
-    { regex: /\b(?:const|let|var|config|result|name|path|value|port|host|url|env|module|export|import)\s*=\s*\w+/i, label: "assignment" },
-    { regex: /\b\w+\s*=\s*\w+\([^)]*\)/, label: "assignment" },
-  ];
-  for (const { regex, label } of strongSignals) {
-    if (regex.test(lower)) { codingScore += 2; signals.push(label); }
-  }
+  const hasCodeIndicators = /["'`{}();]|world|console|print|hello.world/i.test(normalized);
 
   // Run all lexicon-based patterns with weighted scoring
   for (const entry of ALL_PATTERNS) {
     // Skip greeting pattern when text contains code indicators (e.g. "Hello, World!")
     if (entry.label === "greeting/ack" && hasCodeIndicators) continue;
 
-    if (entry.pattern.test(lower)) {
+    if (entry.pattern.test(normalized)) {
       if (entry.group === "chat" || entry.label.startsWith("knowledge")) {
         chatScore += entry.weight;
         signals.push("!" + entry.label);
@@ -90,39 +104,48 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   }
 
   // Planning without execution intent = not coding (backward compat)
-  const hasPlanningOnly = /(?:^|[^\p{L}\p{N}])(plan|strategy|architecture)(?:[^\p{L}\p{N}]|$)/iu.test(lower);
-  const hasExecutionIntent = /(?:^|[^\p{L}\p{N}])(implement|build|code|create)(?:[^\p{L}\p{N}]|$)/iu.test(lower);
+  const hasPlanningOnly = /(?:^|[^\p{L}\p{N}])(plan|strategy|architecture)(?:[^\p{L}\p{N}]|$)/iu.test(normalized);
+  const hasExecutionIntent = /(?:^|[^\p{L}\p{N}])(implement|build|code|create)(?:[^\p{L}\p{N}]|$)/iu.test(normalized);
   if (hasPlanningOnly && !hasExecutionIntent) {
     chatScore += 0.5;
     signals.push("!planning-only");
   }
 
+  // Strong signals (language-independent) add to codingScore and override chat
+  codingScore += strongCodingScore;
+
   const total = codingScore + chatScore;
   const codingConfidence = total > 0 ? codingScore / total : 0.3;
-  const isCoding = codingConfidence >= 0.5 && codingScore >= 1;
+  // Strong signals (≥2) override chat — force coding when strong signals present
+  const isCoding = strongCodingScore >= 2 || (codingConfidence >= 0.5 && codingScore >= 1);
 
   // Resolve taskClass for router
   const taskClass = isCoding
-    ? lower.match(/\b(refactor|optimi[zs]e)\b/i)
+    ? normalized.match(/\b(refactor|optimi[zs]e)\b/i)
       ? "refactor"
-      : lower.match(/\b(debug|trace|diagnose)\b/i)
+      : normalized.match(/\b(debug|trace|diagnose)\b/i)
         ? "debug"
-        : lower.match(/\b(test|testing|unittest|coverage|spec|assert)/i)
+        : normalized.match(/\b(test|testing|unittest|coverage|spec|assert)/i)
           ? "test_generation"
-          : lower.match(/\b(review)\b/i)
+          : normalized.match(/\b(review)\b/i)
             ? "code_review"
             : "implementation"
-    : lower.match(/\b(plan|planning|strategy|architecture|design)\b/i)
+    : normalized.match(/\b(plan|planning|strategy|architecture|design)\b/i)
       ? "planner"
       : "implementation";
 
-  return {
+  const result: TaskClassification = {
     isCodingTask: isCoding,
     taskType: isCoding ? "coding" : (chatScore > 0 ? "chat" : "other"),
     taskClass,
     confidence: codingConfidence,
     signals,
   };
+
+  // Record metrics
+  recordClassification(text, normalized, result);
+
+  return result;
 }
 
 export async function shouldDelegateToExecutionBackend(
