@@ -212,7 +212,9 @@ export default function register(api: any) {
               ? `\n\n🔧 ${parts.join(" · ")}${meta.length ? " · " + meta.join(" · ") : ""}`
               : `\n\n🔧 router${meta.length ? " · " + meta.join(" · ") : ""}`;
 
-            const prependContext = result.output + footer;
+            // Strip any existing runner footer (e.g. "🔧 via codex_primary · 14825ms")
+            const cleanOutput = result.output.replace(/\n\n🔧[^\n]*$/, "").trimEnd();
+            const prependContext = cleanOutput + footer;
 
             if (config.traceRouting) {
               console.log(`[router-bridge] step=result prependContext len=${prependContext.length}`);
