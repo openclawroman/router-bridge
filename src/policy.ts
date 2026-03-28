@@ -91,8 +91,10 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   const execMatches = executionPatterns.some(p => p.test(text));
   const explMatches = explanationPatterns.some(p => p.test(text));
 
-  // Strong signals that always indicate coding (file paths, code fences, stacktraces)
-  const hasStrongSignals = /[\w\-\/]+\.\w{2,4}\b|```|~~~|traceback|stacktrace|exception at/i.test(text);
+  // Strong signals that always indicate coding (code fences, stacktraces)
+  // NOTE: file paths alone are NOT strong signals — "Чому не працює main.py?" is a question
+  // Use file-extension as a regular coding pattern, not a strong signal override
+  const hasStrongSignals = /```|~~~|traceback|stacktrace|exception at/i.test(text);
 
   let executionIntent: boolean;
   if (hasStrongSignals) {
@@ -146,12 +148,14 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
 
   const total = codingScore + chatScore;
   const codingConfidence = total > 0 ? codingScore / total : 0.3;
-  const isCoding = hasStrongSignals || (executionIntent && codingConfidence >= 0.5 && codingScore >= 1);
+  // Strong signal alone is NOT enough — must also have execution intent or coding patterns
+  const isCoding = (hasStrongSignals && (executionIntent || codingScore > 0)) || (executionIntent && codingConfidence >= 0.5 && codingScore >= 1);
 
   // Resolve taskClass for router
   const hasPlanningKeyword = /plan|planning|strategy|architecture|design|сплан|архітектур/i.test(lower);
+  // When execution intent is strong, prefer "implementation" over "planner"
   const taskClass = isCoding
-    ? (codingScore >= 1 ? categorizeCodingTask(lower) : "other")
+    ? (codingScore >= 1 ? categorizeCodingTask(lower, executionIntent) : "other")
     : hasPlanningKeyword ? "planner" : "other";
 
   return {
@@ -163,7 +167,7 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   };
 }
 
-function categorizeCodingTask(text: string): string {
+function categorizeCodingTask(text: string, executionIntent: boolean): string {
   if (/виправ|баг|помилка|debug|fix|bug|error|exception|crash|traceback|відлагодь/i.test(text))
     return "debug";
   if (/рефактор|перероби|optimize|refactor|cleanup|очисти|покращ|rewrite/i.test(text))
@@ -172,7 +176,8 @@ function categorizeCodingTask(text: string): string {
     return "test_generation";
   if (/review|огляд|перевір|check|перевірь|code review/i.test(text))
     return "code_review";
-  if (/сплануй|план|plan|architecture|архітектура|design|дизайн|підхід|approach/i.test(text))
+  // Only classify as planner when there's no execution intent
+  if (/сплануй|план|plan|architecture|архітектура|design|дизайн|підхід|approach/i.test(text) && !executionIntent)
     return "planner";
   return "implementation";
 }

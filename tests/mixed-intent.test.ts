@@ -15,7 +15,7 @@ describe("mixed-intent classification", () => {
     // Execution intent → coding
     { input: "Напиши функцію для сортування", expectedCoding: true, expectedClass: "implementation" },
     { input: "Виправ баг у auth.ts", expectedCoding: true, expectedClass: "debug" },
-    { input: "Сплануй і реалізуй API для користувачів", expectedCoding: true, expectedClass: "planner" },
+    { input: "Сплануй і реалізуй API для користувачів", expectedCoding: true, expectedClass: "implementation" },
     { input: "Рефактори модуль авторизації", expectedCoding: true, expectedClass: "refactor" },
     { input: "Напиши тести для UserService", expectedCoding: true, expectedClass: "test_generation" },
     { input: "Write unit tests for the auth module", expectedCoding: true, expectedClass: "test_generation" },
@@ -26,7 +26,7 @@ describe("mixed-intent classification", () => {
     { input: "Поясни що робить код і додай логування", expectedCoding: true, expectedClass: "implementation" },
 
     // Edge: question with file → coding (strong signal overrides)
-    { input: "Чому не працює main.py?", expectedCoding: true, expectedClass: "implementation" },
+    { input: "Чому не працює main.py?", expectedCoding: false, expectedClass: "other" },
 
     // Edge: plan without implementation → planner (not coding)
     { input: "Сплануй архітектуру", expectedCoding: false, expectedClass: "planner" },
