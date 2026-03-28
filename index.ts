@@ -112,15 +112,20 @@ export default function register(api: any) {
           api.logger?.info?.(`[router-bridge] execute result=${JSON.stringify({success:result.success,error:result.error,exitCode:result.exitCode})}`);
 
           if (result.success) {
-            const parts = [];
+            const TOOL_LABELS: Record<string, string> = { "codex_cli": "Codex CLI", "claude_code": "Claude Code", "openrouter_api": "OpenRouter API" };
+            const BACKEND_LABELS: Record<string, string> = { "openai_native": "OpenAI", "anthropic": "Anthropic", "openrouter": "OpenRouter" };
+            const parts: string[] = [];
+            if (result.tool) parts.push(TOOL_LABELS[result.tool] || result.tool);
+            if (result.backend) parts.push(BACKEND_LABELS[result.backend] || result.backend);
             if (result.model) parts.push(result.model);
+            if (result.durationMs) parts.push(`${(result.durationMs / 1000).toFixed(1)}s`);
             if (result.costEstimateUsd && result.costEstimateUsd > 0) parts.push(`$${result.costEstimateUsd.toFixed(4)}`);
-            if (result.durationMs) parts.push(`${result.durationMs}ms`);
 
-            const footer = parts.length > 0 ? `\n\n🔧 via ${parts.join(" · ")}` : "";
+            const footer = parts.length > 0 ? `\n\n🔧 ${parts.join(" · ")}` : "";
 
-            // Inject router output as prependContext — agent presents it to user
-            const routerOutput = result.output + footer;
+            // Strip any existing runner footer before appending our canonical one
+            const cleanOutput = result.output.replace(/\n\n🔧[^\n]*$/, "").trimEnd();
+            const routerOutput = cleanOutput + footer;
             api.logger?.info?.(`[router-bridge] delegation OK, prependContext len=${routerOutput.length}`);
             return {
               prependContext: `[Router-bridge executed this coding task via ${result.model || "codex"}]\n\n${routerOutput}`,
