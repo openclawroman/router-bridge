@@ -96,6 +96,16 @@ The delegation policy uses `getEffective()` to resolve the active backend at run
 
 For persistent sessions with streaming and cancellation, see Phase 2 (ACP) in [docs/MIGRATION.md](docs/MIGRATION.md).
 
+## Developer Docs
+
+| Doc | Description |
+|-----|-------------|
+| [Architecture](docs/ARCHITECTURE.md) | Plugin internals, hook API, payload format, scope resolution |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common bugs, symptoms, and fixes (including known issues history) |
+| [Installation](docs/INSTALL.md) | Prerequisites, path layout, upgrade guide |
+| [Migration](docs/MIGRATION.md) | Phase 1 → Phase 2 migration guide |
+| [Contract](docs/CONTRACT.md) | Response contract specification |
+
 ## Configuration
 
 ```json
