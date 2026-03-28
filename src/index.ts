@@ -216,6 +216,8 @@ export default function register(api: any) {
 
             if (config.traceRouting) {
               console.log(`[router-bridge] step=result prependContext len=${prependContext.length}`);
+              console.log(`[router-bridge] step=result footer="${footer.trim()}"`);
+              console.log(`[router-bridge] step=result last100="${prependContext.slice(-100)}"`);
             }
 
             recordSuccess();

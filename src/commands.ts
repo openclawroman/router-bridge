@@ -24,14 +24,19 @@ const resolveScope = extractRuntimeScope;
 export { resolveScope, store };
 
 export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
-  // Check dependencies before enabling
+  // Check dependencies before enabling — only block on REQUIRED deps (codex, python3)
   const deps = checkAllDependencies();
   const missing = deps.filter(d => !d.installed);
-  if (missing.length > 0) {
+  const requiredMissing = missing.filter(d => d.name !== "claude");
+  const optionalMissing = missing.filter(d => d.name === "claude");
+  if (requiredMissing.length > 0) {
     return {
-      text: `⚠️ Missing dependencies:\n${formatDependencyReport(missing)}\n\nInstall them before enabling router mode.`,
+      text: `⚠️ Missing required dependencies:\n${formatDependencyReport(requiredMissing)}\n\nInstall them before enabling router mode.`,
     };
   }
+  const optionalWarning = optionalMissing.length > 0
+    ? `\n⚠️ Optional: ${optionalMissing.map(d => d.name).join(", ")} not found — will skip to next fallback layer when needed.`
+    : "";
 
   // Check provider auth — warn but don't block if some providers are configured
   const providers = checkProviderAuth();
@@ -63,6 +68,9 @@ export function handleRouterOn(ctx: any, config: PluginConfig = DEFAULT_CONFIG):
 
   if (unconfigured.length > 0) {
     lines.push(`⚠️ No auth for: ${unconfigured.map(p => p.provider).join(", ")}`);
+  }
+  if (optionalWarning) {
+    lines.push(optionalWarning);
   }
 
   return { text: lines.join("\n") };
