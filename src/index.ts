@@ -11,6 +11,7 @@ import { extractRuntimeScope } from "./scope";
 import type { PluginConfig } from "./types";
 import { checkVersionCompatibility, formatVersionInfo } from "./src/versions";
 import { validateConfig } from "./src/config-validate";
+import { formatFooter, stripExistingFooter, appendFooter, type FooterResult } from "./footer";
 
 export { ensureRuntimeDirectories, validateStateIntegrity, repairStateFile } from "./store";
 export { handleRouterCommand, handleRouterIntent, resolveScope, store } from "./commands";
@@ -179,46 +180,19 @@ export default function register(api: any) {
           }
 
           if (result.success) {
-            const TOOL_LABELS: Record<string, string> = {
-              "codex_cli": "Codex CLI",
-              "claude_code": "Claude Code",
-              "openrouter_api": "OpenRouter API",
+            const footerResult: FooterResult = {
+              tool: result.tool,
+              backend: result.backend,
+              model: result.model,
+              durationMs: result.durationMs,
+              costEstimateUsd: result.costEstimateUsd,
             };
 
-            const BACKEND_LABELS: Record<string, string> = {
-              "openai_native": "OpenAI",
-              "anthropic": "Anthropic",
-              "openrouter": "OpenRouter",
-            };
-
-            const MODEL_LABELS: Record<string, string> = {
-              "codex_primary": "o3-mini",
-              "codex_secondary": "o3",
-              "openrouter_minimax": "MiniMax",
-              "openrouter_kimi": "Kimi K2",
-              "claude_primary": "Claude 4 Sonnet",
-            };
-
-            const toolLabel = TOOL_LABELS[result.tool!] || result.tool;
-            const backendLabel = BACKEND_LABELS[result.backend!] || result.backend;
-            const modelLabel = MODEL_LABELS[result.model!] || result.model;
-
-            const parts = [toolLabel, backendLabel, modelLabel].filter(Boolean);
-            const meta: string[] = [];
-            if (result.durationMs) meta.push(`${(result.durationMs / 1000).toFixed(1)}s`);
-            if (result.costEstimateUsd && result.costEstimateUsd > 0) meta.push(`$${result.costEstimateUsd.toFixed(4)}`);
-
-            const footer = parts.length > 0
-              ? `\n\n🔧 ${parts.join(" · ")}${meta.length ? " · " + meta.join(" · ") : ""}`
-              : `\n\n🔧 router${meta.length ? " · " + meta.join(" · ") : ""}`;
-
-            // Strip any existing runner footer (e.g. "🔧 via codex_primary · 14825ms")
-            const cleanOutput = result.output.replace(/\n\n🔧[^\n]*$/, "").trimEnd();
-            const prependContext = cleanOutput + footer;
+            const prependContext = appendFooter(result.output, footerResult);
 
             if (config.traceRouting) {
               console.log(`[router-bridge] step=result prependContext len=${prependContext.length}`);
-              console.log(`[router-bridge] step=result footer="${footer.trim()}"`);
+              console.log(`[router-bridge] step=result footer="${formatFooter(footerResult).trim()}"`);
               console.log(`[router-bridge] step=result last100="${prependContext.slice(-100)}"`);
             }
 
