@@ -105,7 +105,7 @@ export default function register(api: any) {
             taskMeta: { type: classification.taskType },
             taskClass: classification.taskClass,
             prompt: taskText,
-            cwd: ctx.cwd || process.cwd(),
+            cwd: (ctx as any).workspaceDir || process.cwd(),
             recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
             repoBranch: ctx.gitBranch || null,
           });
