@@ -58,6 +58,21 @@ export function classifyTask(task: string | TaskEnvelope): TaskClassification {
   // Code indicators — presence of quotes, braces, semicolons, or "world" suggests code
   const hasCodeIndicators = /["'`{}();]|world|console|print|hello.world/i.test(lower);
 
+  // Strong signals: language-independent coding indicators (score 2 each)
+  const strongSignals: { regex: RegExp; label: string }[] = [
+    { regex: /(?:^|\s)(\.\/|\/)?[\w\-\/]+\.(ts|js|py|go|rs|java|rb|cpp|c|h|cs|php|swift|kt|sh|yaml|yml|json|toml|nix|dockerfile|test\.ts)(?:\s|,|\.|!|$|\?)/i, label: "file-path" },
+    { regex: /```|~~~/i, label: "code-fence" },
+    { regex: /(?:traceback|stacktrace|at\s+\w+\.\w+\(|Error:|Exception:|SyntaxError|TypeError|ReferenceError|AssertionError|segfault|core dumped|segmentation fault)/i, label: "stacktrace" },
+    { regex: /(?:^|\s)(PR\s*#?\d+|commit|diff|merge\s*conflict)(?:\s|$|[.!,:])/i, label: "git-marker" },
+    { regex: /\bCI\b|\bCD\b|\bpipeline\b|\bGitHub Actions\b|\b\.github\//i, label: "ci-marker" },
+    { regex: /\b\w+\s*\([^)]*\)\s*\{/, label: "code-syntax" },
+    { regex: /\b(?:const|let|var|config|result|name|path|value|port|host|url|env|module|export|import)\s*=\s*\w+/i, label: "assignment" },
+    { regex: /\b\w+\s*=\s*\w+\([^)]*\)/, label: "assignment" },
+  ];
+  for (const { regex, label } of strongSignals) {
+    if (regex.test(lower)) { codingScore += 2; signals.push(label); }
+  }
+
   // Run all lexicon-based patterns with weighted scoring
   for (const entry of ALL_PATTERNS) {
     // Skip greeting pattern when text contains code indicators (e.g. "Hello, World!")
