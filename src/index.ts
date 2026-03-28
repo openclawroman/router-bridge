@@ -212,17 +212,16 @@ export default function register(api: any) {
               ? `\n\n🔧 ${parts.join(" · ")}${meta.length ? " · " + meta.join(" · ") : ""}`
               : `\n\n🔧 router${meta.length ? " · " + meta.join(" · ") : ""}`;
 
-            ctx.routerResult = result.output + footer;
-            ctx.routerMetadata = {
-              backend: effectiveBackend,
-              classification,
-              durationMs: result.durationMs,
-              costEstimateUsd: result.costEstimateUsd,
-              tokensUsed: result.tokensUsed,
-              model: result.model,
-            };
+            const prependContext = result.output + footer;
+
+            if (config.traceRouting) {
+              console.log(`[router-bridge] step=result prependContext len=${prependContext.length}`);
+            }
+
             recordSuccess();
             markRecovered();
+
+            return { prependContext };
           } else if (config.fallbackToNativeOnError) {
             if (config.traceRouting) {
               console.log(`[router-bridge] step=fallback reason=${decision.reason}`);
