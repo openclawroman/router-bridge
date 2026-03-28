@@ -205,7 +205,7 @@ export default function register(api: any) {
 
             const parts = [toolLabel, backendLabel, modelLabel].filter(Boolean);
             const meta: string[] = [];
-            if (result.durationMs) meta.push(`${result.durationMs}ms`);
+            if (result.durationMs) meta.push(`${(result.durationMs / 1000).toFixed(1)}s`);
             if (result.costEstimateUsd && result.costEstimateUsd > 0) meta.push(`$${result.costEstimateUsd.toFixed(4)}`);
 
             const footer = parts.length > 0
