@@ -30,6 +30,7 @@ interface RouterPayload {
   };
   timeout_ms: number;
   max_tokens?: number;
+  continuity_summary?: string | null;
 }
 
 /** Expected JSON structure from router CLI stdout */
@@ -394,6 +395,9 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     if (envelope.cwd) (payload as any).cwd = envelope.cwd;
     if (envelope.recentContext) (payload as any).recent_context = envelope.recentContext;
     if (envelope.repoBranch) (payload as any).repo_branch = envelope.repoBranch;
+    if (envelope.continuitySummary) {
+      payload.continuity_summary = envelope.continuitySummary;
+    }
 
     return payload;
   }
