@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "fs";
+import * as path from "path";
 import { getDelegationMemoryFilePath, getContinuitySummary, loadEntriesForContext, formatTimeAgo, renderContinuitySummary, extractFragment, type DelegationEntry } from "../index";
 
 const MEMORY_STORE_DIR = "/Users/openclaw/src/router-bridge/state/memory";
@@ -149,6 +150,7 @@ test("getContinuitySummary convenience", () => {
     const sessionId = "session-summary-load";
     const filePath = getDelegationMemoryFilePath(threadId, sessionId);
     fs.rmSync(filePath, { force: true });
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     try {
       fs.writeFileSync(
         filePath,

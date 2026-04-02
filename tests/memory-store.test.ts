@@ -1,7 +1,9 @@
-import { test } from "node:test";
+import { beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 import {
   getDelegationMemoryFilePath,
   storeDelegatedResult,
@@ -27,10 +29,23 @@ function makeEntry(overrides: Partial<DelegationEntry> = {}): DelegationEntry {
   };
 }
 
+function resetStore() {
+  fs.rmSync(MEMORY_STORE_DIR, { recursive: true, force: true });
+  fs.mkdirSync(MEMORY_STORE_DIR, { recursive: true });
+}
+
 function readEntries(threadId?: string | null, sessionId?: string | null): DelegationEntry[] {
   const filePath = getDelegationMemoryFilePath(threadId ?? null, sessionId ?? null);
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
+
+beforeEach(() => {
+  resetStore();
+});
+
+afterEach(() => {
+  resetStore();
+});
 
 test("save success result -> entry written to correct file", () => {
   const entry = makeEntry({
@@ -59,7 +74,7 @@ test("failed delegation (result.success=false) -> nothing stored", () => {
   });
 
   assert.equal(storeDelegatedResultIfSuccessful(false, entry), false);
-  assert.equal(fs.existsSync(getDelegationMemoryFilePath("thread-failed", "session-failed")), false);
+  assert.equal(fs.readdirSync(MEMORY_STORE_DIR).length, 0);
 });
 
 test("6 entries -> oldest evicted, only 5 remain", () => {
@@ -121,6 +136,9 @@ test("no thread_id -> session_id fallback works", () => {
 });
 
 test("missing store dir -> created automatically", () => {
+  fs.rmSync(MEMORY_STORE_DIR, { recursive: true, force: true });
+  assert.equal(fs.existsSync(MEMORY_STORE_DIR), false);
+
   assert.equal(
     storeDelegatedResult(makeEntry({ thread_id: "thread-create", session_id: "session-create", task_id: "task-create" })),
     true
