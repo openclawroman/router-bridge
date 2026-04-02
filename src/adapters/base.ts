@@ -57,6 +57,7 @@ export interface TaskEnvelope {
   cwd?: string | null;
   recentContext?: string | null;
   repoBranch?: string | null;
+  continuitySummary?: string | null;
 }
 
 export interface ExecuteResult {

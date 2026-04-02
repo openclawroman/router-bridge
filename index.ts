@@ -344,6 +344,9 @@ export default function register(api: any) {
         }
 
         try {
+          // Phase 3: generate continuity summary for transport
+          const continuitySummary = getContinuitySummary(threadId, sessionId);
+
           const result = await adapter.execute({
             task: taskText,
             taskId: ctx.messageId || `task-${Date.now()}`,
@@ -356,6 +359,7 @@ export default function register(api: any) {
             cwd: (ctx as any).workspaceDir || process.cwd(),
             recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
             repoBranch: ctx.gitBranch || null,
+            continuitySummary: continuitySummary || undefined,
           });
           api.logger?.info?.(`[router-bridge] execute result=${JSON.stringify({success:result.success,error:result.error,exitCode:result.exitCode})}`);
 

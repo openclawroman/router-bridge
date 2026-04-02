@@ -148,9 +148,8 @@ test("getContinuitySummary convenience", () => {
     const threadId = "thread-summary-load";
     const sessionId = "session-summary-load";
     const filePath = getDelegationMemoryFilePath(threadId, sessionId);
-    fs.rmSync(MEMORY_STORE_DIR, { recursive: true, force: true });
+    fs.rmSync(filePath, { force: true });
     try {
-      fs.mkdirSync(MEMORY_STORE_DIR, { recursive: true });
       fs.writeFileSync(
         filePath,
         JSON.stringify(
@@ -178,7 +177,7 @@ test("getContinuitySummary convenience", () => {
       assert.match(summary, /Load continuity summary/);
       assert.match(summary, /thread-summary-load\.json/);
     } finally {
-      fs.rmSync(MEMORY_STORE_DIR, { recursive: true, force: true });
+      fs.rmSync(filePath, { force: true });
     }
   });
 });
