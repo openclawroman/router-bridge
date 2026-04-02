@@ -28,11 +28,22 @@ export interface DelegationEntry {
   cwd?: string;
 }
 
+export interface ContinuityGateResult {
+  inject: boolean;
+  reason: string;
+  threadMatch: boolean;
+  hasHistory: boolean;
+  recentEnough: boolean;
+  cwdMatch: boolean | null;
+}
+
 const MEMORY_STORE_DIR = "/Users/openclaw/src/router-bridge/state/memory";
 const MEMORY_STORE_MAX_ENTRIES = 5;
 const CONTINUITY_SUMMARY_MAX_CHARS = 700;
 const CONTINUITY_SUMMARY_MAX_LINES = 8;
 const CONTINUITY_FRAGMENT_MAX_CHARS = 100;
+const CONTINUITY_DEFAULT_WINDOW_MS = 45 * 60 * 1000;
+const FULL_ENTRY_MAX_OUTPUT_CHARS = 2000;
 
 function sanitizeThreadId(threadId: string): string {
   return threadId.replace(/[:/\\<>|?*"]/g, "_");
@@ -230,6 +241,84 @@ export function getContinuitySummary(threadId?: string | null, sessionId?: strin
   }
 }
 
+export function shouldInjectContinuity(
+  threadId?: string | null,
+  sessionId?: string | null,
+  cwd?: string | null,
+  now: number = Date.now(),
+  windowMs: number = CONTINUITY_DEFAULT_WINDOW_MS,
+): ContinuityGateResult {
+  const fail = (reason: string, overrides: Partial<ContinuityGateResult> = {}): ContinuityGateResult => ({
+    inject: false, reason, threadMatch: false, hasHistory: false, recentEnough: false, cwdMatch: null, ...overrides,
+  });
+
+  if (!threadId || !threadId.trim()) {
+    return fail("no thread id", { threadMatch: false });
+  }
+
+  const entries = loadEntriesForContext(threadId, sessionId);
+  if (entries.length === 0) {
+    return fail("no history", { threadMatch: true, hasHistory: false });
+  }
+
+  const lastEntry = entries[entries.length - 1];
+  const ageMs = now - Number(lastEntry.timestamp);
+  const recentEnough = ageMs >= 0 && ageMs <= windowMs;
+
+  if (!recentEnough) {
+    return fail("history too old", { threadMatch: true, hasHistory: true, recentEnough: false });
+  }
+
+  // CWD gate: if both provided and they differ, block
+  const entryCwd = lastEntry.cwd ? lastEntry.cwd.trim() : "";
+  const requestCwd = cwd ? cwd.trim() : "";
+  let cwdMatch: boolean | null = null;
+
+  if (entryCwd && requestCwd) {
+    cwdMatch = entryCwd === requestCwd;
+    if (!cwdMatch) {
+      return fail("cwd mismatch", { threadMatch: true, hasHistory: true, recentEnough: true, cwdMatch: false });
+    }
+  }
+
+  return { inject: true, reason: "ok", threadMatch: true, hasHistory: true, recentEnough: true, cwdMatch };
+}
+
+export function getRelevantFullEntries(
+  threadId?: string | null,
+  sessionId?: string | null,
+  cwd?: string | null,
+  now: number = Date.now(),
+  windowMs: number = CONTINUITY_DEFAULT_WINDOW_MS,
+  maxEntries: number = 2,
+): DelegationEntry[] {
+  const entries = loadEntriesForContext(threadId, sessionId);
+  if (entries.length === 0) return [];
+
+  const safeMaxEntries = Math.min(Math.max(1, maxEntries), 2);
+
+  // Filter: recent only, optional cwd match
+  const filtered = entries.filter(entry => {
+    const ageMs = now - Number(entry.timestamp);
+    if (ageMs < 0 || ageMs > windowMs) return false;
+    if (cwd && entry.cwd) {
+      if (cwd.trim() !== entry.cwd.trim()) return false;
+    }
+    return true;
+  });
+
+  // Take newest first, then limit
+  const selected = filtered.slice(-safeMaxEntries);
+
+  // Bound output size
+  return selected.map(entry => ({
+    ...entry,
+    output: entry.output.length > FULL_ENTRY_MAX_OUTPUT_CHARS
+      ? entry.output.slice(0, FULL_ENTRY_MAX_OUTPUT_CHARS).trimEnd() + "..."
+      : entry.output,
+  }));
+}
+
 export function storeDelegatedResult(entry: DelegationEntry): boolean {
   try {
     fs.mkdirSync(MEMORY_STORE_DIR, { recursive: true });
@@ -344,8 +433,9 @@ export default function register(api: any) {
         }
 
         try {
-          // Phase 3: generate continuity summary for transport
-          const continuitySummary = getContinuitySummary(threadId, sessionId);
+          // Phase 5: deterministic gating for continuity injection
+          const gate = shouldInjectContinuity(threadId, sessionId, (ctx as any).workspaceDir || null);
+          const continuitySummary = gate.inject ? getContinuitySummary(threadId, sessionId) : null;
 
           const result = await adapter.execute({
             task: taskText,
@@ -359,7 +449,7 @@ export default function register(api: any) {
             cwd: (ctx as any).workspaceDir || process.cwd(),
             recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
             repoBranch: ctx.gitBranch || null,
-            continuitySummary: continuitySummary || undefined,
+            continuitySummary: continuitySummary || undefined, // Phase 5: gated
           });
           api.logger?.info?.(`[router-bridge] execute result=${JSON.stringify({success:result.success,error:result.error,exitCode:result.exitCode})}`);
 
