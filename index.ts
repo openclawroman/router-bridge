@@ -30,6 +30,9 @@ export interface DelegationEntry {
 
 const MEMORY_STORE_DIR = "/Users/openclaw/src/router-bridge/state/memory";
 const MEMORY_STORE_MAX_ENTRIES = 5;
+const CONTINUITY_SUMMARY_MAX_CHARS = 700;
+const CONTINUITY_SUMMARY_MAX_LINES = 8;
+const CONTINUITY_FRAGMENT_MAX_CHARS = 100;
 
 function sanitizeThreadId(threadId: string): string {
   return threadId.replace(/[:/\\<>|?*"]/g, "_");
@@ -53,6 +56,177 @@ function readMemoryEntries(filePath: string): DelegationEntry[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function toSafeString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  try {
+    return String(value);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function truncateText(value: string, maxChars: number): string {
+  if (maxChars <= 0) return "";
+  if (value.length <= maxChars) return value;
+  if (maxChars <= 3) return value.slice(0, maxChars);
+  return `${value.slice(0, maxChars - 3).trimEnd()}...`;
+}
+
+function extractPathFragment(text: string): string | null {
+  const patterns = [
+    /(?:^|[\s"'`(])((?:~?\/|\.{1,2}\/|[A-Za-z]:\\)[^\s"'`<>)\]]+)/g,
+    /(?:^|[\s"'`(])((?:[\w.-]+\/)+[\w.-]+(?:\.[A-Za-z0-9]+)?)(?=[\s"'`<>)\]]|$)/g,
+  ];
+
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    if (match?.[1]) {
+      const candidate = normalizeWhitespace(match[1].replace(/[.,;:!?]+$/, ""));
+      if (candidate && !/^https?:\/\//i.test(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractLineFragment(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const candidate = normalizeWhitespace(line);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function extractSentenceFragment(text: string): string | null {
+  const match = text.match(/^[^.!?]+[.!?]?/);
+  if (!match?.[0]) return null;
+  const candidate = normalizeWhitespace(match[0]);
+  return candidate || null;
+}
+
+function extractOutputFragment(output: string): string | null {
+  const normalized = normalizeWhitespace(output);
+  if (!normalized) return null;
+
+  const pathFragment = extractPathFragment(output);
+  if (pathFragment) return truncateText(pathFragment, CONTINUITY_FRAGMENT_MAX_CHARS);
+
+  const lineFragment = extractLineFragment(output);
+  if (lineFragment) return truncateText(lineFragment, CONTINUITY_FRAGMENT_MAX_CHARS);
+
+  const sentenceFragment = extractSentenceFragment(output);
+  if (sentenceFragment) return truncateText(sentenceFragment, CONTINUITY_FRAGMENT_MAX_CHARS);
+
+  return truncateText(normalized, CONTINUITY_FRAGMENT_MAX_CHARS);
+}
+
+export function extractFragment(entry: DelegationEntry): string {
+  const task = normalizeWhitespace(toSafeString(entry?.task));
+  const output = extractOutputFragment(toSafeString(entry?.output));
+
+  const primary = task || output || "unknown task";
+  const secondary = task && output && output !== task ? output : "";
+  const fragment = secondary ? `${primary} -> ${secondary}` : primary;
+
+  return truncateText(normalizeWhitespace(fragment), CONTINUITY_FRAGMENT_MAX_CHARS);
+}
+
+export function formatTimeAgo(timestamp: number, now: number = Date.now()): string {
+  const safeTimestamp = Number.isFinite(timestamp) ? timestamp : now;
+  const deltaMs = Math.max(0, now - safeTimestamp);
+  const seconds = Math.floor(deltaMs / 1000);
+
+  if (seconds < 45) return "just now";
+  if (seconds < 90) return "1m ago";
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 45) return `${minutes}m ago`;
+  if (minutes < 90) return "1h ago";
+
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function buildSummaryLine(entry: DelegationEntry, now: number): string {
+  const fragment = extractFragment(entry);
+  const tool = normalizeWhitespace(toSafeString(entry?.tool)) || "unknown tool";
+  const age = formatTimeAgo(Number(entry?.timestamp), now);
+  return `- ${fragment} (${tool}, ${age})`;
+}
+
+export function renderContinuitySummary(entries: DelegationEntry[]): string | null {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+
+  const recentEntries = entries.slice(-MEMORY_STORE_MAX_ENTRIES);
+  const now = Date.now();
+  const lines: string[] = ["Recent coding work:"];
+
+  for (let index = recentEntries.length - 1; index >= 0; index -= 1) {
+    if (lines.length >= CONTINUITY_SUMMARY_MAX_LINES) break;
+
+    const entry = recentEntries[index];
+    const line = buildSummaryLine(entry, now);
+    const currentLength = lines.join("\n").length;
+    const separator = lines.length > 0 ? 1 : 0;
+    const remaining = CONTINUITY_SUMMARY_MAX_CHARS - currentLength - separator;
+
+    if (remaining <= 0) break;
+
+    if (line.length <= remaining) {
+      lines.push(line);
+      continue;
+    }
+
+    const suffixMatch = line.match(/^-\s(.*)\s\(([^,]+),\s([^)]+)\)$/);
+    if (!suffixMatch) continue;
+
+    const [, fragment, tool, age] = suffixMatch;
+    const fixed = `-  (${tool}, ${age})`;
+    const maxFragmentChars = remaining - fixed.length;
+    if (maxFragmentChars <= 0) break;
+
+    const truncatedFragment = truncateText(fragment, maxFragmentChars);
+    const truncatedLine = `- ${truncatedFragment} (${tool}, ${age})`;
+    if (truncatedLine.length <= remaining) {
+      lines.push(truncatedLine);
+    }
+  }
+
+  if (lines.length === 1) return null;
+
+  const summary = lines.join("\n");
+  return summary.length > CONTINUITY_SUMMARY_MAX_CHARS ? summary.slice(0, CONTINUITY_SUMMARY_MAX_CHARS).trimEnd() : summary;
+}
+
+export function loadEntriesForContext(threadId?: string | null, sessionId?: string | null): DelegationEntry[] {
+  try {
+    const filePath = getMemoryStorePath(threadId, sessionId);
+    return readMemoryEntries(filePath).slice(-MEMORY_STORE_MAX_ENTRIES);
+  } catch {
+    return [];
+  }
+}
+
+export function getContinuitySummary(threadId?: string | null, sessionId?: string | null): string | null {
+  try {
+    const entries = loadEntriesForContext(threadId, sessionId);
+    if (entries.length === 0) return null;
+    const summary = renderContinuitySummary(entries);
+    return summary && summary.trim() ? summary : null;
+  } catch {
+    return null;
   }
 }
 
