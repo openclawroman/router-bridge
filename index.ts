@@ -12,6 +12,80 @@ import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } fro
 import { checkAutoDegrade } from "./src/safety";
 import { markRecovered } from "./src/recovery";
 
+const fs = require("fs");
+const path = require("path");
+
+export interface DelegationEntry {
+  task_id: string;
+  thread_id: string;
+  session_id: string;
+  timestamp: number;
+  tool: string;
+  backend: string;
+  model: string;
+  task: string;
+  output: string;
+  cwd?: string;
+}
+
+const MEMORY_STORE_DIR = "/Users/openclaw/src/router-bridge/state/memory";
+const MEMORY_STORE_MAX_ENTRIES = 5;
+
+function sanitizeThreadId(threadId: string): string {
+  return threadId.replace(/[:/\\<>|?*"]/g, "_");
+}
+
+function resolveMemoryStoreKey(threadId?: string | null, sessionId?: string | null): string {
+  return threadId || sessionId || "default";
+}
+
+function getMemoryStorePath(threadId?: string | null, sessionId?: string | null): string {
+  const key = sanitizeThreadId(resolveMemoryStoreKey(threadId, sessionId));
+  return path.join(MEMORY_STORE_DIR, `${key}.json`);
+}
+
+function readMemoryEntries(filePath: string): DelegationEntry[] {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const raw = fs.readFileSync(filePath, "utf8");
+    if (!raw.trim()) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function storeDelegatedResult(entry: DelegationEntry): boolean {
+  try {
+    fs.mkdirSync(MEMORY_STORE_DIR, { recursive: true });
+
+    const filePath = getMemoryStorePath(entry.thread_id, entry.session_id);
+    const entries = readMemoryEntries(filePath);
+    entries.push(entry);
+    while (entries.length > MEMORY_STORE_MAX_ENTRIES) {
+      entries.shift();
+    }
+
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(entries, null, 2), "utf8");
+    fs.renameSync(tempPath, filePath);
+    return true;
+  } catch (err: any) {
+    console.warn?.(`[router-bridge] memory store write failed: ${err?.message || err}`);
+    return false;
+  }
+}
+
+export function storeDelegatedResultIfSuccessful(success: boolean, entry: DelegationEntry): boolean {
+  if (!success) return false;
+  return storeDelegatedResult(entry);
+}
+
+export function getDelegationMemoryFilePath(threadId?: string | null, sessionId?: string | null): string {
+  return getMemoryStorePath(threadId, sessionId);
+}
+
 export default function register(api: any) {
   const getConfig = (): PluginConfig => ({
     ...DEFAULT_CONFIG,
@@ -117,16 +191,28 @@ export default function register(api: any) {
             const parts: string[] = [];
             if (result.tool) parts.push(TOOL_LABELS[result.tool] || result.tool);
             if (result.backend) parts.push(BACKEND_LABELS[result.backend] || result.backend);
-            if (result.model) parts.push(MODEL_DISPLAY_NAMES[result.model] || result.model);
+            if (result.model) parts.push(result.model);
             if (result.durationMs) parts.push(`${(result.durationMs / 1000).toFixed(1)}s`);
             if (result.costEstimateUsd && result.costEstimateUsd > 0) parts.push(`$${result.costEstimateUsd.toFixed(4)}`);
 
             const footer = parts.length > 0 ? `\n\n🔧 ${parts.join(" · ")}` : "";
 
             // Strip any existing runner footer before appending our canonical one
-            const cleanOutput = result.output.replace(/\n\n🔧[^\n]*$/, "").trimEnd();
+            const cleanOutput = String(result.output || "").replace(/\n\n🔧[^\n]*$/, "").trimEnd();
             const routerOutput = cleanOutput + footer;
             api.logger?.info?.(`[router-bridge] delegation OK, prependContext len=${routerOutput.length}`);
+            storeDelegatedResultIfSuccessful(result.success, {
+              task_id: String(ctx.messageId || `task-${Date.now()}`),
+              thread_id: threadId || "",
+              session_id: sessionId || "",
+              timestamp: Date.now(),
+              tool: result.tool || "",
+              backend: result.backend || "",
+              model: result.model || "",
+              task: taskText,
+              output: String(result.output || ""),
+              cwd: (ctx as any).workspaceDir || process.cwd(),
+            });
             return {
               prependContext: `[Router-bridge executed this coding task via ${result.model || "codex"}]\n\n${routerOutput}`,
             };
