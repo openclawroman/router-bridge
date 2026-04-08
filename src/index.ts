@@ -1,3 +1,5 @@
+// Legacy/reference entrypoint only. The live OpenClaw extension entrypoint is the repository-root index.ts.
+
 import { ensureRuntimeDirectories, validateStateIntegrity, repairStateFile } from "./store";
 import { handleRouterCommand, handleRouterIntent, store } from "./commands";
 import { matchRouterIntent } from "./skill";

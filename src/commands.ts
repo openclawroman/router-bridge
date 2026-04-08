@@ -13,6 +13,7 @@ import { shouldRoute, describeRolloutLevel } from "./rollout";
 import { checkVersionCompatibility } from "./versions";
 import { validateConfig } from "./config-validate";
 import { checkAllDependencies, formatDependencyReport } from "./dependencies";
+import { resolveRouterInvocation, expandHomePath } from "./router-invocation";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -91,6 +92,7 @@ export function handleRouterOff(ctx: any, config: PluginConfig = DEFAULT_CONFIG)
 export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAULT_CONFIG): Promise<{ text: string }> {
   const { scopeType, scopeId, threadId, sessionId } = resolveScope(ctx, config);
   const effective = store.getEffective(scopeType, scopeId, threadId || undefined, sessionId || undefined);
+  const invocation = resolveRouterInvocation(config);
 
   // Use effective backend for health check, not global config
   const effectiveBackend = effective?.executionBackend || config.backendMode;
@@ -138,6 +140,8 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
     "**Config:**",
     `Scope mode: ${config.scopeMode}`,
     `Router command: \`${config.routerCommand}\``,
+    `Resolved command: \`${[invocation.executableResolved || invocation.executable, ...invocation.baseArgs].filter(Boolean).join(" ")}\``,
+    `Resolved config: \`${invocation.configPath || "(default)"}\``,
     `Fallback on error: ${config.fallbackToNativeOnError ? "yes" : "no"}`,
     `Health cache TTL: ${config.healthCacheTtlMs}ms`,
     "",
@@ -291,8 +295,7 @@ export async function handleRouterStatus(ctx: any, config: PluginConfig = DEFAUL
 }
 
 export function handleRouterInitConfig(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
-  // Expand ~ in path
-  const configPath = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+  const configPath = expandHomePath(config.routerConfigPath);
   const configDir = path.dirname(configPath);
 
   // Ensure config directory exists
@@ -326,7 +329,7 @@ export function handleRouterInitConfig(ctx: any, config: PluginConfig = DEFAULT_
 }
 
 export function handleRouterMigrateConfig(ctx: any, config: PluginConfig = DEFAULT_CONFIG): { text: string } {
-  const configPath = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+  const configPath = expandHomePath(config.routerConfigPath);
 
   if (!fs.existsSync(configPath)) {
     return { text: `❌ No config found at ${configPath}. Use 'init-config' first.` };

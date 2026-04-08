@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import type { PluginConfig } from "./types";
+import { resolveRouterInvocation } from "./router-invocation";
 
 export interface Snapshot {
   id: string;
@@ -20,7 +21,7 @@ export function takeSnapshot(config: PluginConfig): Snapshot {
   const routerRoot = process.env.OPENCLAW_ROUTER_ROOT
     || path.join(process.env.HOME || "/root", ".openclaw", "router");
   const statePath = path.join(routerRoot, "runtime", "bridge", ".router-state.json");
-  const configPath = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+  const configPath = resolveRouterInvocation(config).configPath;
 
   let stateContents: string | null = null;
   if (fs.existsSync(statePath)) {
@@ -57,7 +58,7 @@ export function restoreSnapshot(snapshot: Snapshot): string[] {
   }
 
   // Restore config
-  const configPath = snapshot.config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+  const configPath = resolveRouterInvocation(snapshot.config).configPath;
   if (snapshot.routerConfigContents) {
     const dir = path.dirname(configPath);
     fs.mkdirSync(dir, { recursive: true });

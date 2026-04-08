@@ -1,7 +1,8 @@
-import { execFileSync, execSync, spawn } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import * as fs from "fs";
 import type { RouterExecutionAdapter, HealthResult, HealthCheckResult, TaskEnvelope, ExecuteResult, TaskMeta, Attachment, TaskContext } from "./base";
 import { redactSecrets } from "../security";
+import { resolveRouterInvocation } from "../router-invocation";
 
 /** Payload sent to the router CLI via stdin */
 interface RouterPayload {
@@ -31,6 +32,12 @@ interface RouterPayload {
   timeout_ms: number;
   max_tokens?: number;
   continuity_summary?: string | null;
+  trace?: {
+    bridge_request_id: string;
+    origin: string;
+    prompt_sha256: string;
+    emitted_at: string;
+  };
 }
 
 /** Expected JSON structure from router CLI stdout */
@@ -52,6 +59,7 @@ interface RouterResponse {
   stdout_ref?: string | null;
   stderr_ref?: string | null;
   final_summary?: string;
+  trace_id?: string;
   // Legacy fields (fallback compatibility)
   output?: string;
   error?: string;
@@ -117,6 +125,10 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     const start = Date.now();
 
     const payload = this.buildPayload(envelope, timeoutMs);
+    const invocation = resolveRouterInvocation({
+      routerCommand: this.routerCommand,
+      routerConfigPath: this.routerConfigPath,
+    });
 
     return new Promise((resolve) => {
       let settled = false;
@@ -131,10 +143,9 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       };
 
       try {
-        const commandParts = this.routerCommand.trim().split(/\s+/);
-        const executable = commandParts[0];
-        const baseArgs = commandParts.slice(1);
-        const args = ["--config", this.routerConfigPath];
+        const executable = invocation.executable;
+        const baseArgs = invocation.baseArgs;
+        const args = invocation.configPath ? ["--config", invocation.configPath] : [];
         const env = {
           ...process.env,
           OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
@@ -181,7 +192,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
           if (timeoutHandle) clearTimeout(timeoutHandle);
           const msg =
             err.code === "ENOENT"
-              ? `Router CLI not found: ${this.routerCommand}`
+              ? `Router CLI not found: ${invocation.rawCommand}`
               : `Router spawn error: ${err.message}`;
           this.lastError = msg;
           done({
@@ -222,7 +233,57 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   private checkBinaryExists(): HealthCheckResult {
     const start = Date.now();
     try {
-      const binaryPath = this.routerCommand.split(" ")[0];
+      const invocation = resolveRouterInvocation({
+        routerCommand: this.routerCommand,
+        routerConfigPath: this.routerConfigPath,
+      });
+      const scriptTarget = invocation.baseArgs[0];
+      const scriptTargetPath = scriptTarget && (scriptTarget.includes("/") || scriptTarget.startsWith("."))
+        ? scriptTarget
+        : null;
+      const binaryPath = scriptTargetPath || invocation.executableResolved || invocation.executable;
+
+      if (!binaryPath) {
+        this.lastError = "routerCommand is empty";
+        return {
+          name: "binary_exists",
+          passed: false,
+          message: "routerCommand is empty",
+          latencyMs: Date.now() - start,
+        };
+      }
+
+      if (scriptTargetPath) {
+        const scriptExists = fs.existsSync(scriptTargetPath);
+        if (!scriptExists) this.lastError = `Binary not found: ${scriptTargetPath}`;
+        if (!scriptExists) {
+          return {
+            name: "binary_exists",
+            passed: false,
+            message: `Binary not found: ${scriptTargetPath}`,
+            latencyMs: Date.now() - start,
+          };
+        }
+
+        const interpreterExists = Boolean(invocation.executableResolved && fs.existsSync(invocation.executableResolved));
+        if (!interpreterExists) {
+          const interpreterName = invocation.executableResolved || invocation.executable;
+          this.lastError = `Binary not found: ${interpreterName}`;
+          return {
+            name: "binary_exists",
+            passed: false,
+            message: `Binary not found: ${interpreterName}`,
+            latencyMs: Date.now() - start,
+          };
+        }
+
+        return {
+          name: "binary_exists",
+          passed: true,
+          message: `Binary found: ${scriptTargetPath}`,
+          latencyMs: Date.now() - start,
+        };
+      }
 
       // Absolute path — check filesystem directly
       if (binaryPath.startsWith("/")) {
@@ -237,24 +298,13 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
       }
 
       // Relative name — check PATH via 'which'
-      try {
-        const resolved = execSync(`which ${binaryPath}`, { encoding: "utf-8" }).trim();
-        if (!resolved) throw new Error("empty output");
-        return {
-          name: "binary_exists",
-          passed: true,
-          message: `Binary found in PATH: ${resolved}`,
-          latencyMs: Date.now() - start,
-        };
-      } catch {
-        this.lastError = `Binary '${binaryPath}' not found in PATH`;
-        return {
-          name: "binary_exists",
-          passed: false,
-          message: `Binary '${binaryPath}' not found in PATH`,
-          latencyMs: Date.now() - start,
-        };
-      }
+      this.lastError = `Binary '${binaryPath}' not found in PATH`;
+      return {
+        name: "binary_exists",
+        passed: false,
+        message: `Binary '${binaryPath}' not found in PATH`,
+        latencyMs: Date.now() - start,
+      };
     } catch (err: any) {
       this.lastError = err.message;
       return { name: "binary_exists", passed: false, message: err.message, latencyMs: Date.now() - start };
@@ -263,16 +313,20 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
 
   private checkConfigValid(): HealthCheckResult {
     const start = Date.now();
-    if (!this.routerConfigPath || !this.routerConfigPath.trim()) {
+    const invocation = resolveRouterInvocation({
+      routerCommand: this.routerCommand,
+      routerConfigPath: this.routerConfigPath,
+    });
+    if (!invocation.configPath) {
       return { name: "config_valid", passed: true, message: "No config path set (using defaults)", latencyMs: Date.now() - start };
     }
     try {
-      const exists = fs.existsSync(this.routerConfigPath);
-      if (!exists) this.lastError = `Config not found: ${this.routerConfigPath}`;
+      const exists = fs.existsSync(invocation.configPath);
+      if (!exists) this.lastError = `Config not found: ${invocation.configPath}`;
       return {
         name: "config_valid",
         passed: exists,
-        message: exists ? `Config found: ${this.routerConfigPath}` : `Config not found: ${this.routerConfigPath}`,
+        message: exists ? `Config found: ${invocation.configPath}` : `Config not found: ${invocation.configPath}`,
         latencyMs: Date.now() - start,
       };
     } catch (err: any) {
@@ -310,14 +364,18 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
   private async checkSubprocessHealth(): Promise<HealthCheckResult> {
     const start = Date.now();
     try {
-      const commandParts = this.routerCommand.trim().split(/\s+/);
-      const executable = commandParts[0];
-      const baseArgs = commandParts.slice(1);
+      const invocation = resolveRouterInvocation({
+        routerCommand: this.routerCommand,
+        routerConfigPath: this.routerConfigPath,
+      });
+      const executable = invocation.executable;
+      const baseArgs = invocation.baseArgs;
       const env = {
         ...process.env,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
       };
-      const output = execFileSync(executable, [...baseArgs, "--config", this.routerConfigPath, "--health"], {
+      const configArgs = invocation.configPath ? ["--config", invocation.configPath] : [];
+      const output = execFileSync(executable, [...baseArgs, ...configArgs, "--health"], {
         timeout: 10000,
         encoding: "utf-8",
         env,
@@ -398,6 +456,14 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
     if (envelope.continuitySummary) {
       payload.continuity_summary = envelope.continuitySummary;
     }
+    if (envelope.trace) {
+      payload.trace = {
+        bridge_request_id: envelope.trace.bridgeRequestId,
+        origin: envelope.trace.origin,
+        prompt_sha256: envelope.trace.promptSha256,
+        emitted_at: envelope.trace.emittedAt,
+      };
+    }
 
     return payload;
   }
@@ -466,6 +532,7 @@ export class SubprocessRouterAdapter implements RouterExecutionAdapter {
             model,
             tool: parsed.tool,
             backend: parsed.backend,
+            traceId: parsed.trace_id,
           };
         }
       } catch {

@@ -4,6 +4,7 @@ import { execSync, execFileSync } from "child_process";
 import type { PluginConfig } from "./types";
 import { auditSecurity } from "./security";
 import { checkProviderAuth, hasAnyProviderAuth, type ProviderAuthStatus } from "./secrets";
+import { resolveRouterInvocation } from "./router-invocation";
 
 export interface DoctorCheck {
   name: string;
@@ -59,35 +60,56 @@ function checkPython(): DoctorCheck {
 }
 
 function checkRouterBinary(config: PluginConfig): DoctorCheck {
-  const parts = config.routerCommand.trim().split(/\s+/);
-  const binary = parts[0] === "python3" ? parts[1] : parts[0];
+  const invocation = resolveRouterInvocation(config);
+  const scriptTarget = invocation.baseArgs[0];
+  const scriptTargetPath = scriptTarget && (scriptTarget.includes("/") || scriptTarget.startsWith("."))
+    ? scriptTarget
+    : null;
+  const binary = scriptTargetPath || invocation.executableResolved || invocation.executable;
 
   if (!binary) {
     return { name: "router_binary", passed: false, message: "routerCommand is empty" };
   }
 
-  const expanded = binary.replace(/^~/, process.env.HOME || "/root");
+  if (scriptTargetPath) {
+    if (!fs.existsSync(scriptTargetPath)) {
+      return {
+        name: "router_binary",
+        passed: false,
+        message: `Not found: ${scriptTargetPath}`,
+        details: "Install openclaw-router or update routerCommand in config",
+      };
+    }
 
-  if (fs.existsSync(expanded)) {
-    return { name: "router_binary", passed: true, message: `Found: ${expanded}` };
+    const interpreterExists = Boolean(invocation.executableResolved && fs.existsSync(invocation.executableResolved));
+    if (!interpreterExists) {
+      const interpreterName = invocation.executableResolved || invocation.executable;
+      return {
+        name: "router_binary",
+        passed: false,
+        message: `Not found: ${interpreterName}`,
+        details: "Install python3 or update routerCommand in config",
+      };
+    }
+
+    return { name: "router_binary", passed: true, message: `Found: ${scriptTargetPath}` };
   }
 
-  // Try PATH
-  try {
-    const resolved = execSync(`which ${binary}`, { encoding: "utf-8" }).trim();
-    return { name: "router_binary", passed: true, message: `Found via PATH: ${resolved}` };
-  } catch {
-    return {
-      name: "router_binary",
-      passed: false,
-      message: `Not found: ${expanded}`,
-      details: "Install openclaw-router or update routerCommand in config",
-    };
+  if (invocation.executableResolved && fs.existsSync(invocation.executableResolved)) {
+    return { name: "router_binary", passed: true, message: `Found: ${invocation.executableResolved}` };
   }
+
+  return {
+    name: "router_binary",
+    passed: false,
+    message: `Not found: ${binary}`,
+    details: "Install openclaw-router or update routerCommand in config",
+  };
 }
 
 function checkConfigFile(config: PluginConfig): DoctorCheck {
-  const expanded = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
+  const invocation = resolveRouterInvocation(config);
+  const expanded = invocation.configPath;
 
   if (fs.existsSync(expanded)) {
     return { name: "config_exists", passed: true, message: `Found: ${expanded}` };
@@ -155,14 +177,13 @@ function checkSecrets(): DoctorCheck {
 }
 
 function checkHealthProbe(config: PluginConfig): DoctorCheck {
-  const parts = config.routerCommand.trim().split(/\s+/);
-  const executable = parts[0];
-  const baseArgs = parts.slice(1);
+  const invocation = resolveRouterInvocation(config);
+  const executable = invocation.executable;
+  const baseArgs = invocation.baseArgs;
 
   try {
-    const cfgPath = config.routerConfigPath.replace(/^~/, process.env.HOME || "/root");
-    const configArgs = config.routerConfigPath ? ["--config", cfgPath] : [];
-    const output = execFileSync(executable, [...configArgs, ...baseArgs, "--health"], {
+    const configArgs = invocation.configPath ? ["--config", invocation.configPath] : [];
+    const output = execFileSync(executable, [...baseArgs, ...configArgs, "--health"], {
       timeout: 10000,
       encoding: "utf-8",
     }).trim();
