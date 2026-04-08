@@ -39,7 +39,60 @@ function maybeResolvePath(value: string): string {
 }
 
 function splitCommand(command: string): string[] {
-  return command.trim().split(/\s+/).filter(Boolean).map(maybeResolvePath);
+  const parts: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+
+  const pushCurrent = () => {
+    if (current.length > 0) {
+      parts.push(maybeResolvePath(current));
+      current = "";
+    }
+  };
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+
+    if (escaping) {
+      current += ch;
+      escaping = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      pushCurrent();
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (escaping) {
+    current += "\\";
+  }
+
+  pushCurrent();
+  return parts;
 }
 
 function resolveFromPath(executable: string): string | null {

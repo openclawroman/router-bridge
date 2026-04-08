@@ -102,6 +102,50 @@ describe("router invocation", () => {
     }
   });
 
+  it("parses quoted router commands with spaces in the script path", async () => {
+    const { homeDir, cleanup } = withTempHome();
+    const scriptDir = path.join(homeDir, "bin dir");
+    const scriptPath = path.join(scriptDir, "ai-code-runner");
+    fs.mkdirSync(scriptDir, { recursive: true });
+    fs.writeFileSync(
+      scriptPath,
+      [
+        "#!/usr/bin/env python3",
+        "import json, sys",
+        "if '--health' in sys.argv:",
+        "    print(json.dumps({'healthy': True}))",
+        "else:",
+        "    json.load(sys.stdin)",
+        "    print(json.dumps({'success': True, 'final_summary': 'ok', 'trace_id': 'trace-quoted'}))",
+      ].join("\n"),
+    );
+    fs.chmodSync(scriptPath, 0o755);
+
+    try {
+      const config = {
+        ...DEFAULT_CONFIG,
+        routerCommand: `python3 "${scriptPath}"`,
+        routerConfigPath: "",
+        healthCacheTtlMs: 0,
+      };
+
+      const invocation = resolveRouterInvocation(config);
+      expect(invocation.commandParts).toEqual(["python3", scriptPath]);
+      expect(invocation.baseArgs).toEqual([scriptPath]);
+
+      const adapter = new SubprocessRouterAdapter({
+        routerCommand: config.routerCommand,
+        routerConfigPath: config.routerConfigPath,
+        healthCacheTtlMs: 0,
+      });
+
+      const health = await adapter.health();
+      expect(health.healthy).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("does not mask a missing workspace path", () => {
     const diagnostics = describeWorkspacePath("/definitely/missing/workspace");
     expect(diagnostics.exists).toBe(false);
