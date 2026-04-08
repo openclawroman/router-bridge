@@ -52,7 +52,7 @@ function updateRate(): void {
     : 0;
 }
 
-function appendMetric(event: string, data?: Record<string, any>): void {
+export function recordMetricEvent(event: string, data?: Record<string, any>): void {
   try {
     const filePath = getMetricsPath();
     const dir = path.dirname(filePath);
@@ -68,7 +68,7 @@ export function recordSuccess(): void {
   currentMetrics.totalRouted++;
   currentMetrics.lastSuccessAt = new Date().toISOString();
   updateRate();
-  appendMetric("success");
+  recordMetricEvent("success");
 }
 
 export function recordFallback(reason: string): void {
@@ -76,28 +76,28 @@ export function recordFallback(reason: string): void {
   currentMetrics.lastFallbackAt = new Date().toISOString();
   currentMetrics.lastFallbackReason = reason;
   updateRate();
-  appendMetric("fallback", { reason });
+  recordMetricEvent("fallback", { reason });
 }
 
 export function recordTimeout(): void {
   currentMetrics.totalTimeouts++;
-  appendMetric("timeout");
+  recordMetricEvent("timeout");
 }
 
 export function recordHealthFailure(): void {
   currentMetrics.totalHealthFailures++;
   currentMetrics.lastHealthFailureAt = new Date().toISOString();
-  appendMetric("health_failure");
+  recordMetricEvent("health_failure");
 }
 
 export function recordMalformedResponse(): void {
   currentMetrics.totalMalformedResponses++;
-  appendMetric("malformed_response");
+  recordMetricEvent("malformed_response");
 }
 
 export function recordAuthFailure(): void {
   currentMetrics.totalAuthFailures++;
-  appendMetric("auth_failure");
+  recordMetricEvent("auth_failure");
 }
 
 export function recordShadowRun(): void {

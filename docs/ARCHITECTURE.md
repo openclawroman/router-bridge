@@ -52,6 +52,8 @@ Changes to `src/*.ts` that are imported by root `index.ts` will be picked up on 
 
 The plugin registers a `before_prompt_build` hook. This is the main integration point.
 
+Important: the live OpenClaw extension entrypoint is the repository-root [`index.ts`](../index.ts). [`src/index.ts`](../src/index.ts) is legacy/reference code and must not be treated as the runtime source of truth when debugging cwd or delegation behavior.
+
 ### Handler Signature
 
 ```ts

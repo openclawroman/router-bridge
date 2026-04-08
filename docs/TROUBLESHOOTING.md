@@ -91,6 +91,8 @@ openclaw gateway status
 
 **Fix:** Ensure the bridge sends `context.working_directory` in the router request. The bridge sets this automatically from `ctx.cwd` (falls back to `process.cwd()`).
 
+Current runtime note: the live extension entrypoint is the repository-root [`index.ts`](../index.ts). If you are tracing a production issue, do not debug against [`src/index.ts`](../src/index.ts) unless you are explicitly reviewing legacy/reference code.
+
 ### "stdin is not a terminal" error
 
 **Symptoms:** Codex CLI fails with `Error: stdin is not a terminal`

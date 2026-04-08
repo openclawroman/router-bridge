@@ -8,9 +8,11 @@ import { store } from "./src/commands";
 import { ExecutionBackend, ScopeType } from "./src/types";
 import { extractRuntimeScope } from "./src/scope";
 import { redactSecrets } from "./src/security";
-import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure } from "./src/metrics";
+import { recordSuccess, recordFallback, recordTimeout, recordHealthFailure, recordMetricEvent } from "./src/metrics";
 import { checkAutoDegrade } from "./src/safety";
 import { markRecovered } from "./src/recovery";
+import { createHash, randomUUID } from "crypto";
+import { describeWorkspacePath, resolveRouterInvocation } from "./src/router-invocation";
 
 const fs = require("fs");
 const path = require("path");
@@ -44,6 +46,18 @@ const CONTINUITY_SUMMARY_MAX_LINES = 8;
 const CONTINUITY_FRAGMENT_MAX_CHARS = 100;
 const CONTINUITY_DEFAULT_WINDOW_MS = 45 * 60 * 1000;
 const FULL_ENTRY_MAX_OUTPUT_CHARS = 2000;
+
+function hashPrompt(prompt: string): string {
+  return createHash("sha256").update(prompt).digest("hex");
+}
+
+function createBridgeRequestId(): string {
+  try {
+    return randomUUID();
+  } catch {
+    return `bridge-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+}
 
 function sanitizeThreadId(threadId: string): string {
   return threadId.replace(/[:/\\<>|?*"]/g, "_");
@@ -406,6 +420,40 @@ export default function register(api: any) {
 
       if (decision.delegate) {
         const adapter = createAdapter(config, decision.backend);
+        const invocation = resolveRouterInvocation(config);
+        const workspaceDiagnostics = describeWorkspacePath((ctx as any).workspaceDir || null);
+        const delegationCwd = workspaceDiagnostics.exists && workspaceDiagnostics.isDirectory
+          ? (workspaceDiagnostics.realpath || workspaceDiagnostics.resolvedPath)
+          : null;
+        const bridgeRequestId = createBridgeRequestId();
+        const delegatedTaskId = String(ctx.messageId || `task-${Date.now()}`);
+        const metricContext = {
+          bridge_request_id: bridgeRequestId,
+          taskId: delegatedTaskId,
+          threadId: threadId || "",
+          sessionId: sessionId || "",
+          scopeId,
+          router_command_raw: config.routerCommand,
+          router_command_resolved: [invocation.executableResolved || invocation.executable, ...invocation.baseArgs].filter(Boolean).join(" "),
+          router_config_path: invocation.configPath || "",
+          workspace_raw: workspaceDiagnostics.rawPath,
+          workspace_resolved: workspaceDiagnostics.resolvedPath,
+          workspace_realpath: workspaceDiagnostics.realpath,
+          cwd_exists: workspaceDiagnostics.exists,
+          cwd_is_directory: workspaceDiagnostics.isDirectory,
+          delegated_cwd: delegationCwd,
+          prompt_sha256: hashPrompt(taskText),
+        };
+        const trace = {
+          bridgeRequestId,
+          origin: "router-bridge",
+          promptSha256: metricContext.prompt_sha256,
+          emittedAt: new Date().toISOString(),
+        };
+
+        if (config.traceRouting || !workspaceDiagnostics.exists || !workspaceDiagnostics.isDirectory) {
+          api.logger?.info?.(`[router-bridge] delegation-context=${JSON.stringify(metricContext)}`);
+        }
 
         if (config.fallbackToNativeOnError) {
           const safety = checkAutoDegrade(config);
@@ -417,6 +465,12 @@ export default function register(api: any) {
 
         try {
           const health = await adapter.health();
+          recordMetricEvent("health_result", {
+            ...metricContext,
+            healthy: health.healthy,
+            latency_ms: health.latencyMs,
+            output: health.output,
+          });
           if (!health.healthy) {
             if (config.fallbackToNativeOnError) {
               recordHealthFailure();
@@ -425,6 +479,12 @@ export default function register(api: any) {
             }
           }
         } catch (err: any) {
+          recordMetricEvent("health_result", {
+            ...metricContext,
+            healthy: false,
+            latency_ms: 0,
+            output: redactSecrets(err?.message || String(err)),
+          });
           if (config.fallbackToNativeOnError) {
             recordHealthFailure();
             recordFallback("health_exception");
@@ -434,24 +494,40 @@ export default function register(api: any) {
 
         try {
           // Phase 5: deterministic gating for continuity injection
-          const gate = shouldInjectContinuity(threadId, sessionId, (ctx as any).workspaceDir || null);
+          const gate = shouldInjectContinuity(threadId, sessionId, delegationCwd);
           const continuitySummary = gate.inject ? getContinuitySummary(threadId, sessionId) : null;
+          recordMetricEvent("delegate_request", metricContext);
 
           const result = await adapter.execute({
             task: taskText,
-            taskId: ctx.messageId || `task-${Date.now()}`,
+            taskId: delegatedTaskId,
             scopeId,
             threadId,
             sessionId,
             taskMeta: { type: classification.taskType },
             taskClass: classification.taskClass,
             prompt: taskText,
-            cwd: (ctx as any).workspaceDir || process.cwd(),
+            context: {
+              workingDirectory: delegationCwd || undefined,
+              gitBranch: ctx.gitBranch || undefined,
+            },
+            trace,
+            cwd: delegationCwd,
             recentContext: ctx.recentMessages?.slice(-3)?.map((m: any) => m.text || m).join("\n") || null,
             repoBranch: ctx.gitBranch || null,
             continuitySummary: continuitySummary || undefined, // Phase 5: gated
           });
           api.logger?.info?.(`[router-bridge] execute result=${JSON.stringify({success:result.success,error:result.error,exitCode:result.exitCode})}`);
+          recordMetricEvent("delegate_result", {
+            ...metricContext,
+            success: result.success,
+            exitCode: result.exitCode,
+            duration_ms: result.durationMs,
+            tool: result.tool,
+            backend: result.backend,
+            model: result.model,
+            router_trace_id: result.traceId || "",
+          });
 
           if (result.success) {
             const TOOL_LABELS: Record<string, string> = { "codex_cli": "Codex CLI", "claude_code": "Claude Code", "openrouter_api": "OpenRouter API" };
@@ -470,7 +546,7 @@ export default function register(api: any) {
             const routerOutput = cleanOutput + footer;
             api.logger?.info?.(`[router-bridge] delegation OK, prependContext len=${routerOutput.length}`);
             storeDelegatedResultIfSuccessful(result.success, {
-              task_id: String(ctx.messageId || `task-${Date.now()}`),
+              task_id: delegatedTaskId,
               thread_id: threadId || "",
               session_id: sessionId || "",
               timestamp: Date.now(),
@@ -479,7 +555,7 @@ export default function register(api: any) {
               model: result.model || "",
               task: taskText,
               output: String(result.output || ""),
-              cwd: (ctx as any).workspaceDir || process.cwd(),
+              cwd: delegationCwd || undefined,
             });
             return {
               prependContext: `[Router-bridge executed this coding task via ${result.model || "codex"}]\n\n${routerOutput}`,
@@ -490,6 +566,10 @@ export default function register(api: any) {
           }
         } catch (err: any) {
           api.logger?.error?.(`[router-bridge] execute error: ${err?.message || err}`);
+          recordMetricEvent("delegate_exception", {
+            ...metricContext,
+            error: redactSecrets(err?.message || String(err)),
+          });
           if (config.fallbackToNativeOnError) {
             if (err.message?.includes("timed out")) {
               recordTimeout();

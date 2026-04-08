@@ -35,6 +35,13 @@ export interface TaskContext {
   gitCommit?: string;
 }
 
+export interface TraceContext {
+  bridgeRequestId: string;
+  origin: string;
+  promptSha256: string;
+  emittedAt: string;
+}
+
 export interface TaskEnvelope {
   // Core
   task: string;
@@ -52,6 +59,7 @@ export interface TaskEnvelope {
   attachments?: Attachment[];
   context?: TaskContext;
   metadata?: Record<string, unknown>;
+  trace?: TraceContext;
 
   // Continuity fields
   cwd?: string | null;
@@ -70,6 +78,7 @@ export interface ExecuteResult {
   model?: string;
   tool?: string;
   backend?: string;
+  traceId?: string;
 }
 
 export interface RouterExecutionAdapter {
